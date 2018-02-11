@@ -24,7 +24,8 @@ var engine;
 // 	6. numBytes
 
 var nodes;
-var boxSize = 100;
+var tiers;
+
 // Individual GUIs that are open
 var openWindows = [];
 
@@ -45,6 +46,51 @@ function startBabylonJS() {
 		console.log("Your browser doesn't support Babylon.js! \n:(");
 		alert("Your browser doesn't support Babylon.js! \n:(");
 	}
+}
+
+class Tier{
+
+    	constructor(radius){
+    		//Set obj vars
+    		this.radius = radius
+    		this.nodes = [];
+
+    		//Array of points to construct circle
+			var myPoints = [];
+
+			var theta = 0;
+		    var deltaTheta = 0.025*Math.PI;
+
+		    for (var i=0; i<81; i++) {
+		        myPoints.push(new BABYLON.Vector3(radius * Math.cos(theta), 0, radius * Math.sin(theta)));
+		        theta += deltaTheta;
+		    }
+			
+			//Create dashed circle mesh 
+			var tierMesh = BABYLON.MeshBuilder.CreateDashedLines("lines", {points: myPoints, dashNb:500}, scene); 
+
+			this.mesh = tierMesh;
+    	}
+
+    	addNode(node){
+    		//Add node to tier's node array
+    		this.nodes.push(node);
+    	}
+
+    	drawNodes(){
+    		//Get new delta theta
+    		var theta = 0;
+    		var deltaTheta = ((Math.PI*2)/(this.nodes.length*Math.PI))*Math.PI;
+
+    		//Create and place node meshes
+    		for(var i=0; i<this.nodes.length; i++){
+				nodes[i].mesh = BABYLON.Mesh.CreateSphere("node"+i, 16, nodes[i].flows/1000, scene);
+				nodes[i].mesh.position = new BABYLON.Vector3(this.radius * Math.cos(theta), 0, this.radius * Math.sin(theta));
+				theta += deltaTheta;
+				console.log(nodes[i].mesh.position);
+    		}
+    	}
+
 }
 
 
@@ -77,6 +123,7 @@ function setupSocketIO(){
 
 		console.log(data);
 
+		//Check for error in nfdump scripts
 		if(data[0]){
 			buildVis(data);
 		}else{
@@ -107,7 +154,6 @@ function setupScene(){
 	// Default intensity is 1. Let's dim the light a small amount
 	light.intensity = 0.7;
 
-
 	// ActionManager for actions with keys
 	scene.actionManager = new BABYLON.ActionManager(scene);
 	
@@ -123,7 +169,6 @@ function setupScene(){
                     break;
             }
     }));
-
 }
 
 
@@ -315,20 +360,32 @@ function interactiveGUI(){
 
 function buildVis(data){
 
+	//Clear previous nodes
 	if(nodes){
 		for(var i=0; i<nodes.length; i++){
 			nodes[i].mesh.dispose();
 		}
 	}
 
+
+
+	// Create tiers
+ 	const tier1 = new Tier(100);
+
+	//Set nodes to newly returned nodes
 	nodes = data[1];
 
+	//Center node!
+	nodes[0].mesh = BABYLON.Mesh.CreateSphere("centerNode", 16, nodes[0].flows/1000, scene);
+	nodes[0].mesh.position = new BABYLON.Vector3(0, 0, 0);
 
-	// Create nodes and place randomly!
-	for(var i=0; i<nodes.length; i++){
-		nodes[i].mesh = BABYLON.Mesh.CreateSphere("node"+i, 16, nodes[i].flows/1000, scene);
-		nodes[i].mesh.position = new BABYLON.Vector3(randomNumber(-1*(boxSize/2),(boxSize/2)),randomNumber(-1*(boxSize/2),(boxSize/2)),randomNumber(-1*(boxSize/2),(boxSize/2)));
+
+	// Create nodes and place along tiers
+	for(var i=1; i<nodes.length; i++){
+		tier1.addNode(nodes[i]);
 	}
+
+	tier1.drawNodes();
 
 
 		/*// Create connections! (lines)
