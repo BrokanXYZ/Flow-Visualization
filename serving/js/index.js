@@ -23,8 +23,8 @@ var engine;
 // 	5. numPackets
 // 	6. numBytes
 
-var nodes;
 var tiers;
+var centerNode;
 
 // Individual GUIs that are open
 var openWindows = [];
@@ -48,12 +48,51 @@ function startBabylonJS() {
 	}
 }
 
+class Edge{
+
+	constructor(edgeObj){
+		
+	}
+
+}
+
+class Node{
+
+	constructor(nodeObj){
+		// Copy data returned from server
+		this.ip = nodeObj.ip;
+		this.flows = nodeObj.flows;
+		this.flowsP = nodeObj.flows;
+		this.ibpp = nodeObj.flows;
+		this.ibps = nodeObj.flows;
+		this.ibyt = nodeObj.flows;
+		this.ibytP = nodeObj.flows;
+		this.ipkt = nodeObj.flows;
+		this.ipktP = nodeObj.flows;
+		this.ipps = nodeObj.flows;
+		this.proto = nodeObj.flows;
+		this.td = nodeObj.flows;
+		this.tend = nodeObj.flows;
+		this.tstart = nodeObj.flows;
+		
+		// Ports in use by node
+		this.ports = nodeObj.ports;
+
+		// Mesh vars
+		this.nodeSize = this.flows/500;
+		this.mesh = null;
+	}
+
+}
+
 class Tier{
 
-    	constructor(radius){
+    	constructor(radius, tierNum){
     		//Set obj vars
     		this.radius = radius
+    		this.tierNum = tierNum;
     		this.nodes = [];
+
 
     		//Array of points to construct circle
 			var myPoints = [];
@@ -74,21 +113,42 @@ class Tier{
 
     	addNode(node){
     		//Add node to tier's node array
-    		this.nodes.push(node);
+    		this.nodes.push(new Node(node));
     	}
 
     	drawNodes(){
     		//Get new delta theta
     		var theta = 0;
-    		var deltaTheta = ((Math.PI*2)/(this.nodes.length*Math.PI))*Math.PI;
+    		var deltaTheta = (2*Math.PI)/this.nodes.length;
 
     		//Create and place node meshes
     		for(var i=0; i<this.nodes.length; i++){
-				nodes[i].mesh = BABYLON.Mesh.CreateSphere("node"+i, 16, nodes[i].flows/1000, scene);
-				nodes[i].mesh.position = new BABYLON.Vector3(this.radius * Math.cos(theta), 0, this.radius * Math.sin(theta));
+    			// Create Node
+				this.nodes[i].mesh = BABYLON.Mesh.CreateSphere("tier" + this.tierNum + "_node" + i, 16, this.nodes[i].nodeSize, scene);
+
+				// Create and place ports around node
+			    var portTheta = 0;
+			    var portDeltaTheta = (2*Math.PI)/this.nodes[i].ports.length;
+			    for(var j=0; j<this.nodes[i].ports.length; j++){
+			        this.nodes[i].ports[j].mesh = BABYLON.Mesh.CreateSphere("node" + i + "_port" + this.nodes[i].ports[j].num, 16, this.nodes[i].nodeSize/6, scene);
+			        this.nodes[i].ports[j].mesh.position = new BABYLON.Vector3((this.nodes[i].nodeSize/2) * Math.cos(portTheta), 0, (this.nodes[i].nodeSize/2) * Math.sin(portTheta));
+			        
+			        //MATERIAL
+			        this.nodes[i].ports[j].mesh.material =  new BABYLON.StandardMaterial("node" + i + "_port" + this.nodes[i].ports[j].num, scene);
+			        this.nodes[i].ports[j].mesh.material.specularColor = new BABYLON.Color3(0, 0, 0);
+			        this.nodes[i].ports[j].mesh.material.diffuseColor = new BABYLON.Color3(parseInt(this.nodes[i].ports[j].num) % 5, parseInt(this.nodes[i].ports[j].num) % 9, parseInt(this.nodes[i].ports[j].num) % 2);
+
+			        this.nodes[i].ports[j].mesh.parent = this.nodes[i].mesh;
+			        portTheta += portDeltaTheta;
+			    }
+			    
+			    // Place node
+				this.nodes[i].mesh.position = new BABYLON.Vector3(this.radius * Math.cos(theta), 0, this.radius * Math.sin(theta));
 				theta += deltaTheta;
-				console.log(nodes[i].mesh.position);
     		}
+
+
+    		console.log(this.nodes);
     	}
 
 }
@@ -267,7 +327,7 @@ function interactiveGUI(){
 
 
 				var label = new BABYLON.GUI.TextBlock();
-				label.text = "Stat Val: " + nodes[pickedNode].val + "\n" +
+				label.text = "IP: " + nodes[pickedNode].ip + "\n" +
 							 "# Flows: " + nodes[pickedNode].flows + " (" + nodes[pickedNode].flowsP + "%)\n" +
 							 "# Packets: " + nodes[pickedNode].ipkt + " (" + nodes[pickedNode].ipktP + "%)\n" +
 							 "# Bytes: " + nodes[pickedNode].ibyt + " (" + nodes[pickedNode].ibytP + "%)\n" +
@@ -361,81 +421,62 @@ function interactiveGUI(){
 function buildVis(data){
 
 	//Clear previous nodes
-	if(nodes){
-		for(var i=0; i<nodes.length; i++){
-			nodes[i].mesh.dispose();
-		}
-	}
+	// * * * * * * * * *
+	// tiers and center!!!!!!!!!!
 
 
 
 	// Create tiers
- 	const tier1 = new Tier(100);
+ 	var tier1 = new Tier(100, "1");
+ 	var tier2 = new Tier(200, "2");
+ 	var tier3 = new Tier(300, "3");
 
-	//Set nodes to newly returned nodes
-	nodes = data[1];
+	//Newly returned nodes
+	var nodes = data[1];
 
-	//Center node!
-	nodes[0].mesh = BABYLON.Mesh.CreateSphere("centerNode", 16, nodes[0].flows/1000, scene);
-	nodes[0].mesh.position = new BABYLON.Vector3(0, 0, 0);
+	// First node is the center node
+	centerNode = new Node((nodes.splice(0,1))[0]);
+	
+	centerNode.mesh = BABYLON.Mesh.CreateSphere("centerNode", 16, centerNode.nodeSize, scene);
+
+	// Create and place ports around node
+    var portTheta = 0;
+    var portDeltaTheta = (2*Math.PI)/centerNode.ports.length;
+    for(var j=0; j<centerNode.ports.length; j++){
+        centerNode.ports[j].mesh = BABYLON.Mesh.CreateSphere("node" + i + "_port" + centerNode.ports[j].num, 16, centerNode.nodeSize/6, scene);
+        centerNode.ports[j].mesh.position = new BABYLON.Vector3((centerNode.nodeSize/2) * Math.cos(portTheta), 0, (centerNode.nodeSize/2) * Math.sin(portTheta));
+        
+        //MATERIAL
+        centerNode.ports[j].mesh.material =  new BABYLON.StandardMaterial("centerNode" + "_port" + centerNode.ports[j].num, scene);
+        centerNode.ports[j].mesh.material.specularColor = new BABYLON.Color3(0, 0, 0);
+        centerNode.ports[j].mesh.material.diffuseColor = new BABYLON.Color3(parseInt(centerNode.ports[j].num) % 3, parseInt(centerNode.ports[j].num) % 4, parseInt(centerNode.ports[j].num) % 2);
+
+        centerNode.ports[j].mesh.parent = centerNode.mesh;
+        portTheta += portDeltaTheta;
+    }
+
+	centerNode.mesh.position = new BABYLON.Vector3(0, 0, 0);
 
 
 	// Create nodes and place along tiers
-	for(var i=1; i<nodes.length; i++){
+	for(var i=0; i<nodes.length/3; i++){
 		tier1.addNode(nodes[i]);
 	}
 
 	tier1.drawNodes();
 
+	for(var i=nodes.length/3; i<(nodes.length*2)/3; i++){
+		tier2.addNode(nodes[i]);
+	}
 
-		/*// Create connections! (lines)
-		var foundSrc;
-		var foundDst;
-		var srcIndex;
-		var dstIndex;
-		
-		
-		for(var i=0; i<connections.length; i++){
-			
-			foundSrc = false;
-			foundDst = false;
-			
-			for(var j=0; j<nodes.length; j++){
-				
-				// If both src & dst IP addresses where found... Create line/connection!
-				if(foundSrc && foundDst){
-					connections[i].mesh = BABYLON.Mesh.CreateLines("line"+i,[nodes[srcIndex].mesh.position, nodes[dstIndex].mesh.position]);
-					
-					// 0->1 based on numBytes
-					var colorWeight = (parseInt(connections[i].numBytes)/889823300)-(127/8898233); 
-					
-					if(colorWeight>0.5){
-						connections[i].mesh.color = new BABYLON.Color3(1,(2-colorWeight*2),0);
-					}else if(colorWeight<0.5){
-						connections[i].mesh.color = new BABYLON.Color3((colorWeight*2),1,0);
-					}else{
-						connections[i].mesh.color = new BABYLON.Color3(1,1,0);
-					}
-					
-					
-					//console.log(connections[i].srcIP + " --> " + connections[i].dstIP + "(" + colorWeight + ")")
-					console.log("number of lines created");
-					
-					break;
-				}
-				
-				// Check if dst/src IP address exists
-				if(connections[i].srcIP == nodes[j].ip){
-					srcIndex = j;
-					foundSrc = true;
-				}else if(connections[i].dstIP == nodes[j].ip){
-					dstIndex = j;
-					foundDst = true;
-				}
-				
-			}
-			
-		}*/
+	tier2.drawNodes();
+
+	for(var i=(nodes.length*2)/3; i<nodes.length; i++){
+		tier3.addNode(nodes[i]);
+	}
+
+	tier3.drawNodes();
+
 
 
 }

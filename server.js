@@ -111,7 +111,7 @@ io.on('connection', function(socket){
 			tempNode.tend = tempCols[1];
 			tempNode.td = tempCols[2];
 			tempNode.proto = tempCols[3];
-			tempNode.val = tempCols[4];
+			tempNode.ip = tempCols[4];
 			tempNode.flows = tempCols[5];
 			tempNode.flowsP = tempCols[6];
 			tempNode.ipkt = tempCols[7];
@@ -121,6 +121,7 @@ io.on('connection', function(socket){
 			tempNode.ipps = tempCols[11];
 			tempNode.ibps = tempCols[12];
 			tempNode.ibpp = tempCols[13];
+			tempNode.ports = [];
 
 			nodes.push(tempNode);
 		}
@@ -145,30 +146,180 @@ io.on('connection', function(socket){
 
 			var tempConnection = new Object();
 			var tempCols = output[i].split(',');
+			var tempString, tempFloat;
 
 			tempConnection.tstart = tempCols[0];
 			tempConnection.tend = tempCols[1];
-			tempConnection.td = tempCols[2];
-			tempConnection.proto = tempCols[3];
-			tempConnection.srcad = tempCols[4];
-			tempConnection.dstad = tempCols[5];
-			tempConnection.srcpt = tempCols[6];
-			tempConnection.dstpt = tempCols[7];
-			tempConnection.pkt = tempCols[8];
-			tempConnection.byt = tempCols[9];
-			tempConnection.flows = tempCols[10];
-			tempConnection.bps = tempCols[11];
-			tempConnection.pps = tempCols[12];
-			tempConnection.bpp = tempCols[13];
+			tempConnection.td = tempCols[2].trim();
+			tempConnection.proto = tempCols[3].trim();
+			tempConnection.srcad = tempCols[4].trim();
+			tempConnection.dstad = tempCols[5].trim();
+			tempConnection.srcpt = tempCols[6].trim();
+			tempConnection.dstpt = tempCols[7].trim();
+
+			// If M or G prefix is used... remove and convert... else use as is
+			tempString = tempCols[8].trim();
+
+			if(tempString[tempString.length-1]=='M'){
+				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
+				tempFloat *= 1000000
+			}else if(tempString[tempString.length-1]=='G'){
+				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
+				tempFloat *= 1000000000
+			}else{
+				tempFloat = parseFloat(tempString);
+			}
+
+			tempConnection.pkt = tempFloat;
+
+
+			// If M or G prefix is used... remove and convert... else use as is
+			tempString = tempCols[9].trim();
+
+			if(tempString[tempString.length-1]=='M'){
+				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
+				tempFloat *= 1000000
+			}else if(tempString[tempString.length-1]=='G'){
+				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
+				tempFloat *= 1000000000
+			}else{
+				tempFloat = parseFloat(tempString);
+			}
+
+			tempConnection.byt = tempFloat;
+
+			// If M or G prefix is used... remove and convert... else use as is
+			tempString = tempCols[10].trim();
+
+			if(tempString[tempString.length-1]=='M'){
+				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
+				tempFloat *= 1000000
+			}else if(tempString[tempString.length-1]=='G'){
+				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
+				tempFloat *= 1000000000
+			}else{
+				tempFloat = parseFloat(tempString);
+			}
+
+			tempConnection.flows = tempFloat;
+
+			// **Might be calculated incorrectly
+			tempConnection.bps = tempCols[11].trim();
+			tempConnection.pps = tempCols[12].trim();
+			tempConnection.bpp = tempCols[13].trim();
 
 			connections.push(tempConnection);
 		}
 
 
-		// 3. Package data
+
+
+		// 3. Generate port data for nodes from the connection data
+		var srcadFound, dstadFound, done, updated;
+		var j;
+
+
+		for(i=0; i<connections.length; i++){
+
+			srcadFound = false;
+			dstadFound = false;
+			done = false;
+			j=0;
+
+			// Search through nodes
+			while(!(srcadFound && dstadFound) && !done){
+
+				// Update src node
+				if(connections[i].srcad == nodes[j].ip){
+					updated = false;
+
+					// Search for existing entry in node[i] for connections[i]'s port
+					for(x=0; x<nodes[j].ports.length; x++){
+						if(nodes[j].ports[x].num == connections[i].srcpt){
+							//1. update it!
+							nodes[j].ports[x].outFlows += connections[i].flows;
+							nodes[j].ports[x].outPkts += connections[i].pkt;
+							nodes[j].ports[x].outByts += connections[i].byt;
+
+							updated = true;
+						}
+					}
+
+					//2. if not found... add a new entry
+					if(!updated){
+						var tempPort = new Object();
+						tempPort.num = connections[i].srcpt;
+						tempPort.inFlows = 0;
+						tempPort.inPkts = 0;
+						tempPort.inByts = 0;
+						tempPort.outFlows = connections[i].flows;
+						tempPort.outPkts = connections[i].pkt;
+						tempPort.outByts = connections[i].byt;
+
+						nodes[j].ports.push(tempPort);
+					}
+
+					// srcad for connection[i] is done
+					srcadFound = true;
+				}
+
+
+				// Update dst node
+				if(connections[i].dstad == nodes[j].ip){
+					updated = false;
+
+					// Search for existing entry in node[i] for connections[i]'s port
+					for(x=0; x<nodes[j].ports.length; x++){
+						if(nodes[j].ports[x].num == connections[i].dstpt){
+							//1. update it!
+							nodes[j].ports[x].inFlows += connections[i].flows;
+							nodes[j].ports[x].inPkts += connections[i].pkt;
+							nodes[j].ports[x].inByts += connections[i].byt;
+
+							updated = true;
+						}
+					}
+
+					//2. if not found... add a new entry
+					if(!updated){
+						var tempPort = new Object();
+						tempPort.num = connections[i].dstpt;
+						tempPort.inFlows = connections[i].flows;
+						tempPort.inPkts = connections[i].pkt;
+						tempPort.inByts = connections[i].byt;
+						tempPort.outFlows = 0;
+						tempPort.outPkts = 0;
+						tempPort.outByts = 0;
+
+						nodes[j].ports.push(tempPort);
+					}
+
+					// dstad for connection[i] is done
+					dstadFound = true;
+				}
+
+
+				// incr through nodes
+				j++
+
+				// Done if we have exhausted nodes 
+				if(j>=nodes.length){
+					done=true;
+				}
+			}	
+
+
+
+		}
+
+
+
+
+
+		// 4. Package data
 		var returnData = [true, nodes, connections, summary];
 
-		// 4. Send data to client
+		// 5. Send data to client
 		socket.emit('NFdumpReturn', returnData);
 
 	});
