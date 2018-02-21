@@ -112,16 +112,17 @@ io.on('connection', function(socket){
 			tempNode.td = tempCols[2];
 			tempNode.proto = tempCols[3];
 			tempNode.ip = tempCols[4];
-			tempNode.flows = tempCols[5];
+			tempNode.flows = stringToFloat(tempCols[5].trim());
 			tempNode.flowsP = tempCols[6];
-			tempNode.ipkt = tempCols[7];
+			tempNode.ipkt = stringToFloat(tempCols[7].trim());
 			tempNode.ipktP = tempCols[8];
-			tempNode.ibyt = tempCols[9];
+			tempNode.ibyt = stringToFloat(tempCols[9].trim());
 			tempNode.ibytP = tempCols[10];
-			tempNode.ipps = tempCols[11];
-			tempNode.ibps = tempCols[12];
-			tempNode.ibpp = tempCols[13];
+			tempNode.ipps = stringToFloat(tempCols[11].trim());
+			tempNode.ibps = stringToFloat(tempCols[12].trim());
+			tempNode.ibpp = stringToFloat(tempCols[13].trim());
 			tempNode.ports = [];
+			tempNode.meshSize = null;
 
 			nodes.push(tempNode);
 		}
@@ -131,13 +132,35 @@ io.on('connection', function(socket){
 
 
 
+		// 2. Generate size for nodes
 
-		// 2. Get connection data
+		// 2a. find min and max flows
+		var minFlows = 999999999999999999999;
+		var maxFlows = 0;
 
-		// 2a. Run nfdump
+		for(x=0; x<nodes.length; x++){
+			if(nodes[x].flows>maxFlows){
+				maxFlows = nodes[x].flows;
+			}
+
+			if(nodes[x].flows<minFlows){
+				minFlows = nodes[x].flows;
+			}
+		}
+
+		// 2b. generate sizes between the range [minNodeSize, maxNodeSize]
+		for(x=0; x<nodes.length; x++){
+			nodes[x].meshSize = (((data.maxNodeSize-data.minNodeSize)*(nodes[x].flows-minFlows))/(maxFlows-minFlows))+data.minNodeSize;
+		}
+
+
+
+		// 3. Get connection data
+
+		// 3a. Run nfdump
 		var getConnections = cp.spawnSync('nfdump', ['-O' + 'flows','-r' + data.fileName, '-o' + 'fmt:%ts,%te,%td,%pr,%sa,%da,%sp,%dp,%pkt,%byt,%fl,%bps,%pps,%bpp', '-A' + 'srcip,dstip,srcport,dstport'], { encoding : 'utf8' });
 
-		// 2b. Parse data
+		// 3b. Parse data
 		//Split up lines
 		output = getConnections.stdout.split(/\r?\n/);
 
@@ -156,57 +179,14 @@ io.on('connection', function(socket){
 			tempConnection.dstad = tempCols[5].trim();
 			tempConnection.srcpt = tempCols[6].trim();
 			tempConnection.dstpt = tempCols[7].trim();
-
-			// If M or G prefix is used... remove and convert... else use as is
-			tempString = tempCols[8].trim();
-
-			if(tempString[tempString.length-1]=='M'){
-				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
-				tempFloat *= 1000000
-			}else if(tempString[tempString.length-1]=='G'){
-				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
-				tempFloat *= 1000000000
-			}else{
-				tempFloat = parseFloat(tempString);
-			}
-
-			tempConnection.pkt = tempFloat;
-
-
-			// If M or G prefix is used... remove and convert... else use as is
-			tempString = tempCols[9].trim();
-
-			if(tempString[tempString.length-1]=='M'){
-				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
-				tempFloat *= 1000000
-			}else if(tempString[tempString.length-1]=='G'){
-				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
-				tempFloat *= 1000000000
-			}else{
-				tempFloat = parseFloat(tempString);
-			}
-
-			tempConnection.byt = tempFloat;
-
-			// If M or G prefix is used... remove and convert... else use as is
-			tempString = tempCols[10].trim();
-
-			if(tempString[tempString.length-1]=='M'){
-				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
-				tempFloat *= 1000000
-			}else if(tempString[tempString.length-1]=='G'){
-				tempFloat = parseFloat(tempString.substr(0,tempString.length-2));
-				tempFloat *= 1000000000
-			}else{
-				tempFloat = parseFloat(tempString);
-			}
-
-			tempConnection.flows = tempFloat;
+			tempConnection.pkt = stringToFloat(tempCols[8].trim());
+			tempConnection.byt = stringToFloat(tempCols[9].trim());
+			tempConnection.flows = stringToFloat(tempCols[10].trim());
 
 			// **Might be calculated incorrectly
-			tempConnection.bps = tempCols[11].trim();
-			tempConnection.pps = tempCols[12].trim();
-			tempConnection.bpp = tempCols[13].trim();
+			tempConnection.bps = stringToFloat(tempCols[11].trim());
+			tempConnection.pps = stringToFloat(tempCols[12].trim());
+			tempConnection.bpp = stringToFloat(tempCols[13].trim());
 
 			connections.push(tempConnection);
 		}
@@ -214,7 +194,7 @@ io.on('connection', function(socket){
 
 
 
-		// 3. Generate port data for nodes from the connection data
+		// 4. Generate port data for nodes from the connection data
 		var srcadFound, dstadFound, done, updated;
 		var j;
 
@@ -307,22 +287,40 @@ io.on('connection', function(socket){
 					done=true;
 				}
 			}	
-
-
-
 		}
 
 
 
 
 
-		// 4. Package data
-		var returnData = [true, nodes, connections, summary];
+		// 5. Package data
+		var returnData = [true, nodes, connections, summary, minFlows, maxFlows];
 
-		// 5. Send data to client
+		// 6. Send data to client
 		socket.emit('NFdumpReturn', returnData);
 
 	});
+
+
+	function stringToFloat(inString){
+
+		var finalFloat;
+
+		// If M or G prefix is used... remove and convert... else use as is
+		if(inString[inString.length-1]=='M'){
+			finalFloat = parseFloat(inString.substr(0,inString.length-2));
+			finalFloat *= 1000000
+		}else if(inString[inString.length-1]=='G'){
+			finalFloat = parseFloat(inString.substr(0,inString.length-2));
+			finalFloat *= 1000000000
+		}else{
+			finalFloat = parseFloat(inString);
+		}
+
+		return finalFloat;
+	}
+
+
 
 });
 

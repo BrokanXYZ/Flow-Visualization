@@ -62,24 +62,24 @@ class Node{
 		// Copy data returned from server
 		this.ip = nodeObj.ip;
 		this.flows = nodeObj.flows;
-		this.flowsP = nodeObj.flows;
-		this.ibpp = nodeObj.flows;
-		this.ibps = nodeObj.flows;
-		this.ibyt = nodeObj.flows;
-		this.ibytP = nodeObj.flows;
-		this.ipkt = nodeObj.flows;
-		this.ipktP = nodeObj.flows;
-		this.ipps = nodeObj.flows;
-		this.proto = nodeObj.flows;
-		this.td = nodeObj.flows;
-		this.tend = nodeObj.flows;
-		this.tstart = nodeObj.flows;
+		this.flowsP = nodeObj.flowsP;
+		this.ibpp = nodeObj.ibpp;
+		this.ibps = nodeObj.ibps;
+		this.ibyt = nodeObj.ibyt;
+		this.ibytP = nodeObj.ibytP;
+		this.ipkt = nodeObj.ipkt;
+		this.ipktP = nodeObj.ipktP;
+		this.ipps = nodeObj.ipps;
+		this.proto = nodeObj.proto;
+		this.td = nodeObj.td;
+		this.tend = nodeObj.tend;
+		this.tstart = nodeObj.tstart;
 		
 		// Ports in use by node
 		this.ports = nodeObj.ports;
 
 		// Mesh vars
-		this.nodeSize = this.flows/500;
+		this.meshSize = nodeObj.meshSize;
 		this.mesh = null;
 	}
 
@@ -124,14 +124,14 @@ class Tier{
     		//Create and place node meshes
     		for(var i=0; i<this.nodes.length; i++){
     			// Create Node
-				this.nodes[i].mesh = BABYLON.Mesh.CreateSphere("tier" + this.tierNum + "_node" + i, 16, this.nodes[i].nodeSize, scene);
+				this.nodes[i].mesh = BABYLON.Mesh.CreateSphere("tier" + this.tierNum + "_node" + i, 16, this.nodes[i].meshSize, scene);
 
 				// Create and place ports around node
 			    var portTheta = 0;
 			    var portDeltaTheta = (2*Math.PI)/this.nodes[i].ports.length;
 			    for(var j=0; j<this.nodes[i].ports.length; j++){
-			        this.nodes[i].ports[j].mesh = BABYLON.Mesh.CreateSphere("node" + i + "_port" + this.nodes[i].ports[j].num, 16, this.nodes[i].nodeSize/6, scene);
-			        this.nodes[i].ports[j].mesh.position = new BABYLON.Vector3((this.nodes[i].nodeSize/2) * Math.cos(portTheta), 0, (this.nodes[i].nodeSize/2) * Math.sin(portTheta));
+			        this.nodes[i].ports[j].mesh = BABYLON.Mesh.CreateSphere("node" + i + "_port" + this.nodes[i].ports[j].num, 16, this.nodes[i].meshSize/6, scene);
+			        this.nodes[i].ports[j].mesh.position = new BABYLON.Vector3((this.nodes[i].meshSize/2) * Math.cos(portTheta), 0, (this.nodes[i].meshSize/2) * Math.sin(portTheta));
 			        
 			        //MATERIAL
 			        this.nodes[i].ports[j].mesh.material =  new BABYLON.StandardMaterial("node" + i + "_port" + this.nodes[i].ports[j].num, scene);
@@ -235,10 +235,12 @@ function setupScene(){
 
 var genData = function(){
 
-	this.fileName = '';
-	this.numNodes = 1;
-	this.stat = '1';
-	this.orderBy = '1';
+	this.fileName = 'anonFlows';
+	this.numNodes = 25;
+	this.minNodeSize = 5;
+	this.maxNodeSize = 50;
+	this.stat = 'ip';
+	this.orderBy = 'flows';
 	this.connections = false;
 
 	this.executeNFdump = function(){
@@ -248,9 +250,12 @@ var genData = function(){
 		
 		data.fileName = this.fileName;
 		data.numNodes = this.numNodes;
+		data.minNodeSize = this.minNodeSize;
+		data.maxNodeSize = this.maxNodeSize;
 		data.stat = this.stat;
 		data.orderBy = this.orderBy;
 		data.connections = this.connections;
+		
 		
 		//Send to server
 		socket.emit('executeNFdump', data);
@@ -281,6 +286,8 @@ function visGenGUI(){
 	var essentials = gui.addFolder('Essentials');
 	essentials.add(dataGetter, 'fileName');
 	essentials.add(dataGetter, 'numNodes', 1, 100).step(1);
+	essentials.add(dataGetter, 'minNodeSize', 0, 100).step(1);
+	essentials.add(dataGetter, 'maxNodeSize', 0, 100).step(1);
 	essentials.add(dataGetter, 'stat', ['record', 'srcip', 'dstip', 'ip', 'nhip', 'nhbip', 'router', 'srcport', 'dstport', 'port', 'tos', 'srctos', 'dsttos', 'dir', 'srcas', 'dstas', 'as', 'inif', 'outif', 'if', 'srcmask', 'dstmask', 'srcvlan', 'dstvlan', 'vlan', 'insrcmac', 'outdstmac', 'indstmac', 'outsrcmac', 'srcmac', 'dstmac', 'inmac', 'outmac', 'mask', 'proto'] );
 	essentials.add(dataGetter, 'orderBy', ['flows', 'ipkg', 'opkg', 'ibytes', 'obytes', 'ipps', 'opps', 'ibps', 'obps', 'tstart', 'tend'] );
 	essentials.add(dataGetter, 'executeNFdump');
@@ -437,14 +444,14 @@ function buildVis(data){
 	// First node is the center node
 	centerNode = new Node((nodes.splice(0,1))[0]);
 	
-	centerNode.mesh = BABYLON.Mesh.CreateSphere("centerNode", 16, centerNode.nodeSize, scene);
+	centerNode.mesh = BABYLON.Mesh.CreateSphere("centerNode", 16, centerNode.meshSize, scene);
 
 	// Create and place ports around node
     var portTheta = 0;
     var portDeltaTheta = (2*Math.PI)/centerNode.ports.length;
     for(var j=0; j<centerNode.ports.length; j++){
-        centerNode.ports[j].mesh = BABYLON.Mesh.CreateSphere("node" + i + "_port" + centerNode.ports[j].num, 16, centerNode.nodeSize/6, scene);
-        centerNode.ports[j].mesh.position = new BABYLON.Vector3((centerNode.nodeSize/2) * Math.cos(portTheta), 0, (centerNode.nodeSize/2) * Math.sin(portTheta));
+        centerNode.ports[j].mesh = BABYLON.Mesh.CreateSphere("node" + i + "_port" + centerNode.ports[j].num, 16, centerNode.meshSize/6, scene);
+        centerNode.ports[j].mesh.position = new BABYLON.Vector3((centerNode.meshSize/2) * Math.cos(portTheta), 0, (centerNode.meshSize/2) * Math.sin(portTheta));
         
         //MATERIAL
         centerNode.ports[j].mesh.material =  new BABYLON.StandardMaterial("centerNode" + "_port" + centerNode.ports[j].num, scene);
