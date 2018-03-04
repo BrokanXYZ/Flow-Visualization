@@ -13,17 +13,10 @@ var scene;
 var engine;
 
 
-// List of edge objects
-//
-// Edge
-// 	1. srcIP
-// 	2. dstIP
-// 	3. srcPort
-// 	4. dstPort
-// 	5. numPackets
-// 	6. numBytes
 
-var tiers;
+// Global mesh vars
+var tiers = [];
+var connections = [];
 var centerNode;
 
 // Individual GUIs that are open
@@ -48,10 +41,126 @@ function startBabylonJS() {
 	}
 }
 
-class Edge{
+class Connection{
 
-	constructor(edgeObj){
-		
+	constructor(connectionObj){
+		// 1. Copy data returned from server
+		this.srcip = connectionObj.srcip;
+		this.dstip = connectionObj.dstip;
+		this.srcpt = connectionObj.srcpt;
+		this.dstpt = connectionObj.dstpt;
+		this.proto = connectionObj.proto;
+		this.byt = connectionObj.byt;
+		this.pkt = connectionObj.pkt;
+		this.flows = connectionObj.flows;
+		this.bpp = connectionObj.bpp;
+		this.bps = connectionObj.bps;
+		this.pps = connectionObj.pps;
+		this.td = connectionObj.td;
+		this.tend = connectionObj.tend;
+		this.tstart = connectionObj.tstart;
+
+		// 2. Get src and dst positions
+		this.srcPosition;
+		this.dstPosition;
+
+		var srcFound = false;
+		var dstFound = false;
+		var x = 0;
+		var y = 0;
+		var z = 0;
+
+
+		// First, check centerNode
+
+		// Source
+		if(centerNode.ip==this.srcip){
+			z=0;
+			while(!srcFound && z<centerNode.ports.length){
+				if(centerNode.ports[z].num==this.srcpt){
+					this.srcPosition = centerNode.ports[z].mesh.position;
+					srcFound = true;
+				}
+				z++;
+			}
+		}
+
+		// Destination
+		if(centerNode.ip==this.dstip){
+			z=0;
+			while(!dstFound && z<centerNode.ports.length){
+				if(centerNode.ports[z].num==this.dstpt){
+					this.dstPosition = centerNode.ports[z].mesh.position;
+					dstFound = true;
+				}
+				z++;
+			}
+		}
+
+
+
+
+		// Second, check all other nodes
+		while((!srcFound || !dstFound) && x<tiers.length){
+
+			y=0;
+
+			while((!srcFound || !dstFound) && y<tiers[x].nodes.length){
+
+				// Source
+				if(tiers[x].nodes[y].ip==this.srcip){
+					z=0;
+					while(!srcFound && z<tiers[x].nodes[y].ports.length){
+						if(tiers[x].nodes[y].ports[z].num==this.srcpt){
+							this.srcPosition = new BABYLON.Vector3(tiers[x].nodes[y].ports[z].mesh.position.x + tiers[x].nodes[y].mesh.position.x,
+																	tiers[x].nodes[y].ports[z].mesh.position.y + tiers[x].nodes[y].mesh.position.y,
+																	tiers[x].nodes[y].ports[z].mesh.position.z + tiers[x].nodes[y].mesh.position.z);
+							srcFound = true;
+						}
+						z++;
+					}
+				}
+
+
+				// Destination 
+				if(tiers[x].nodes[y].ip==this.dstip){
+					z=0;
+					while(!dstFound && z<tiers[x].nodes[y].ports.length){
+						if(tiers[x].nodes[y].ports[z].num==this.dstpt){
+							this.dstPosition = new BABYLON.Vector3(tiers[x].nodes[y].ports[z].mesh.position.x + tiers[x].nodes[y].mesh.position.x,
+																	tiers[x].nodes[y].ports[z].mesh.position.y + tiers[x].nodes[y].mesh.position.y,
+																	tiers[x].nodes[y].ports[z].mesh.position.z + tiers[x].nodes[y].mesh.position.z);
+							dstFound = true;
+						}
+						z++;
+					}
+				}
+
+
+				y++;
+			}
+			x++;
+		}
+
+
+		this.test = false;
+
+		// 3. If src and dst positions where found, then draw the connection. Otherwise do not draw.
+		if(srcFound && dstFound){
+
+			this.test = true;
+
+
+			// Bezier Curve with control point being the midpoint b/w src and dst at a constant HEIGHT
+			this.mesh = BABYLON.MeshBuilder.CreateTube("connection_" + this.srcip + ":" + this.srcpt + " to " + this.dstip + ":" + this.dstpt, 
+					{path: BABYLON.Curve3.CreateQuadraticBezier(this.srcPosition, new BABYLON.Vector3((this.srcPosition.x + this.dstPosition.x)/2, 50, (this.srcPosition.z + this.dstPosition.z)/2), this.dstPosition, 10).getPoints(), 
+					radius: 0.5, 
+					tessellation: 4, 
+					sideOrientation: BABYLON.Mesh.SINGLESIDE, 
+					updatable: true}, 
+				scene);
+		}
+
 	}
 
 }
@@ -213,6 +322,25 @@ function setupScene(){
 
 	// Default intensity is 1. Let's dim the light a small amount
 	light.intensity = 0.7;
+
+
+
+
+	/*var skybox = BABYLON.MeshBuilder.CreateBox("skyBox", {size:2500.0}, scene);
+	var skyboxMaterial = new BABYLON.StandardMaterial("skyBox", scene);
+	skyboxMaterial.backFaceCulling = false;
+	skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("/serving/skybox/skybox", scene);
+	skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+	skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+	skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+	skybox.material = skyboxMaterial;*/
+
+
+
+
+
+
+
 
 	// ActionManager for actions with keys
 	scene.actionManager = new BABYLON.ActionManager(scene);
@@ -431,15 +559,14 @@ function buildVis(data){
 	// * * * * * * * * *
 	// tiers and center!!!!!!!!!!
 
-
-
-	// Create tiers
- 	var tier1 = new Tier(100, "1");
- 	var tier2 = new Tier(200, "2");
- 	var tier3 = new Tier(300, "3");
+	
 
 	//Newly returned nodes
 	var nodes = data[1];
+
+
+
+
 
 	// First node is the center node
 	centerNode = new Node((nodes.splice(0,1))[0]);
@@ -450,7 +577,7 @@ function buildVis(data){
     var portTheta = 0;
     var portDeltaTheta = (2*Math.PI)/centerNode.ports.length;
     for(var j=0; j<centerNode.ports.length; j++){
-        centerNode.ports[j].mesh = BABYLON.Mesh.CreateSphere("node" + i + "_port" + centerNode.ports[j].num, 16, centerNode.meshSize/6, scene);
+        centerNode.ports[j].mesh = BABYLON.Mesh.CreateSphere("centerNode" + "_port" + centerNode.ports[j].num, 16, centerNode.meshSize/6, scene);
         centerNode.ports[j].mesh.position = new BABYLON.Vector3((centerNode.meshSize/2) * Math.cos(portTheta), 0, (centerNode.meshSize/2) * Math.sin(portTheta));
         
         //MATERIAL
@@ -465,25 +592,93 @@ function buildVis(data){
 	centerNode.mesh.position = new BABYLON.Vector3(0, 0, 0);
 
 
-	// Create nodes and place along tiers
-	for(var i=0; i<nodes.length/3; i++){
-		tier1.addNode(nodes[i]);
+	
+
+
+
+
+
+
+
+
+	// tier control vars
+	var nodesPerTier = 5;
+	var numTiers = Math.ceil(nodes.length/nodesPerTier);
+
+
+	// Create tiers
+	for(var x=1; x<=numTiers; x++){
+		tiers.push(new Tier(100*x, x));
 	}
 
-	tier1.drawNodes();
 
-	for(var i=nodes.length/3; i<(nodes.length*2)/3; i++){
-		tier2.addNode(nodes[i]);
+
+	var nodeIndex = 0;
+	var lastNodeIndex = 0;
+	var tierIndex = 0;
+
+	// Add nodes to tiers
+	while(tierIndex<numTiers){
+
+		while((nodeIndex-lastNodeIndex)<nodesPerTier && nodeIndex<nodes.length){
+			tiers[tierIndex].addNode(nodes[nodeIndex]);
+			nodeIndex++;
+		}
+		
+		lastNodeIndex = nodeIndex;
+		tierIndex++;
 	}
 
-	tier2.drawNodes();
-
-	for(var i=(nodes.length*2)/3; i<nodes.length; i++){
-		tier3.addNode(nodes[i]);
+	// Draw nodes
+	for(var x=0; x<tiers.length; x++){
+		tiers[x].drawNodes();
 	}
 
-	tier3.drawNodes();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	// Add connections
+	var connects = data[2];
+
+	/*console.log("CONNECTIONS:");
+	console.log(connections);
+
+	var testConnection = new Connection(data[2][0]);
+
+	console.log("TEST: ");
+	console.log(testConnection);*/
+
+	for(var x=0; x<connects.length; x++){
+		connections.push(new Connection(connects[x]));
+	}
+
+
+	var test = 0;
+
+	for(var x=0; x<connections.length; x++){
+		if(connections[x].test)
+			test++;
+	}
+
+	console.log("# connections visible = " + test);
 
 
 }

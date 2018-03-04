@@ -175,8 +175,8 @@ io.on('connection', function(socket){
 			tempConnection.tend = tempCols[1];
 			tempConnection.td = tempCols[2].trim();
 			tempConnection.proto = tempCols[3].trim();
-			tempConnection.srcad = tempCols[4].trim();
-			tempConnection.dstad = tempCols[5].trim();
+			tempConnection.srcip = tempCols[4].trim();
+			tempConnection.dstip = tempCols[5].trim();
 			tempConnection.srcpt = tempCols[6].trim();
 			tempConnection.dstpt = tempCols[7].trim();
 			tempConnection.pkt = stringToFloat(tempCols[8].trim());
@@ -195,22 +195,22 @@ io.on('connection', function(socket){
 
 
 		// 4. Generate port data for nodes from the connection data
-		var srcadFound, dstadFound, done, updated;
+		var srcipFound, dstipFound, done, updated;
 		var j;
 
 
 		for(i=0; i<connections.length; i++){
 
-			srcadFound = false;
-			dstadFound = false;
+			srcipFound = false;
+			dstipFound = false;
 			done = false;
 			j=0;
 
 			// Search through nodes
-			while(!(srcadFound && dstadFound) && !done){
+			while(!(srcipFound && dstipFound) && !done){
 
 				// Update src node
-				if(connections[i].srcad == nodes[j].ip){
+				if(connections[i].srcip == nodes[j].ip){
 					updated = false;
 
 					// Search for existing entry in node[i] for connections[i]'s port
@@ -239,13 +239,13 @@ io.on('connection', function(socket){
 						nodes[j].ports.push(tempPort);
 					}
 
-					// srcad for connection[i] is done
-					srcadFound = true;
+					// srcip for connection[i] is done
+					srcipFound = true;
 				}
 
 
 				// Update dst node
-				if(connections[i].dstad == nodes[j].ip){
+				if(connections[i].dstip == nodes[j].ip){
 					updated = false;
 
 					// Search for existing entry in node[i] for connections[i]'s port
@@ -274,8 +274,8 @@ io.on('connection', function(socket){
 						nodes[j].ports.push(tempPort);
 					}
 
-					// dstad for connection[i] is done
-					dstadFound = true;
+					// dstip for connection[i] is done
+					dstipFound = true;
 				}
 
 
