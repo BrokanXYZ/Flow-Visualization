@@ -19,8 +19,21 @@ var tiers = [];
 var connections = [];
 var centerNode;
 
+// Global visual generation vars (with default values)
+var nodesPerTier = 5;
+
 // Individual GUIs that are open
 var openWindows = [];
+
+
+
+
+
+
+
+
+
+
 
 
 // Entry point
@@ -153,8 +166,8 @@ class Connection{
 
 			// Bezier Curve with control point being the midpoint b/w src and dst at a constant HEIGHT
 			this.mesh = BABYLON.MeshBuilder.CreateTube("connection_" + this.srcip + ":" + this.srcpt + " to " + this.dstip + ":" + this.dstpt, 
-					{path: BABYLON.Curve3.CreateQuadraticBezier(this.srcPosition, new BABYLON.Vector3((this.srcPosition.x + this.dstPosition.x)/2, 50, (this.srcPosition.z + this.dstPosition.z)/2), this.dstPosition, 10).getPoints(), 
-					radius: 0.5, 
+					{path: BABYLON.Curve3.CreateQuadraticBezier(this.srcPosition, new BABYLON.Vector3((this.srcPosition.x + this.dstPosition.x)/2, 100, (this.srcPosition.z + this.dstPosition.z)/2), this.dstPosition, 20).getPoints(), 
+					radius: 0.25, 
 					tessellation: 4, 
 					sideOrientation: BABYLON.Mesh.SINGLESIDE, 
 					updatable: true}, 
@@ -233,19 +246,22 @@ class Tier{
     		//Create and place node meshes
     		for(var i=0; i<this.nodes.length; i++){
     			// Create Node
-				this.nodes[i].mesh = BABYLON.Mesh.CreateSphere("tier" + this.tierNum + "_node" + i, 16, this.nodes[i].meshSize, scene);
-
+				this.nodes[i].mesh = BABYLON.Mesh.CreateSphere("node" + this.tierNum + "," + i, 16, this.nodes[i].meshSize, scene);
+				this.nodes[i].mesh.material = new BABYLON.StandardMaterial("tier" + this.tierNum + "_node" + i + "Mat", scene);
+				//this.nodes[i].mesh.material.diffuseColor = new BABYLON.Color3(1.3,1,0.7);
 				// Create and place ports around node
 			    var portTheta = 0;
 			    var portDeltaTheta = (2*Math.PI)/this.nodes[i].ports.length;
 			    for(var j=0; j<this.nodes[i].ports.length; j++){
-			        this.nodes[i].ports[j].mesh = BABYLON.Mesh.CreateSphere("node" + i + "_port" + this.nodes[i].ports[j].num, 16, this.nodes[i].meshSize/6, scene);
-			        this.nodes[i].ports[j].mesh.position = new BABYLON.Vector3((this.nodes[i].meshSize/2) * Math.cos(portTheta), 0, (this.nodes[i].meshSize/2) * Math.sin(portTheta));
+			        this.nodes[i].ports[j].mesh = BABYLON.Mesh.CreateSphere("port" + this.tierNum + "," + i + "," + j, 16, this.nodes[i].meshSize/6, scene);
+			        this.nodes[i].ports[j].mesh.position = new BABYLON.Vector3((this.nodes[i].meshSize/1.5) * Math.cos(portTheta), 0, (this.nodes[i].meshSize/1.5) * Math.sin(portTheta));
 			        
 			        //MATERIAL
+			        var portColor = colorHash(this.nodes[i].ports[j].num);
+
 			        this.nodes[i].ports[j].mesh.material =  new BABYLON.StandardMaterial("node" + i + "_port" + this.nodes[i].ports[j].num, scene);
 			        this.nodes[i].ports[j].mesh.material.specularColor = new BABYLON.Color3(0, 0, 0);
-			        this.nodes[i].ports[j].mesh.material.diffuseColor = new BABYLON.Color3(parseInt(this.nodes[i].ports[j].num) % 5, parseInt(this.nodes[i].ports[j].num) % 9, parseInt(this.nodes[i].ports[j].num) % 2);
+			        this.nodes[i].ports[j].mesh.material.diffuseColor = new BABYLON.Color3(portColor.r, portColor.g, portColor.b);
 
 			        this.nodes[i].ports[j].mesh.parent = this.nodes[i].mesh;
 			        portTheta += portDeltaTheta;
@@ -256,8 +272,6 @@ class Tier{
 				theta += deltaTheta;
     		}
 
-
-    		console.log(this.nodes);
     	}
 
 }
@@ -323,7 +337,8 @@ function setupScene(){
 	// Default intensity is 1. Let's dim the light a small amount
 	light.intensity = 0.7;
 
-
+	// Background Color
+	//scene.clearColor = new BABYLON.Color3(0.2, 0.2, 0.4);
 
 
 	/*var skybox = BABYLON.MeshBuilder.CreateBox("skyBox", {size:2500.0}, scene);
@@ -369,9 +384,13 @@ var genData = function(){
 	this.maxNodeSize = 50;
 	this.stat = 'ip';
 	this.orderBy = 'flows';
+	this.nodesPerTier = 5;
 	this.connections = false;
 
 	this.executeNFdump = function(){
+
+		// Set global vars
+		nodesPerTier = this.nodesPerTier;
 
 		//Package data
 		var data = {};
@@ -413,6 +432,7 @@ function visGenGUI(){
 
 	var essentials = gui.addFolder('Essentials');
 	essentials.add(dataGetter, 'fileName');
+	essentials.add(dataGetter, 'nodesPerTier', 1, 100).step(1);
 	essentials.add(dataGetter, 'numNodes', 1, 100).step(1);
 	essentials.add(dataGetter, 'minNodeSize', 0, 100).step(1);
 	essentials.add(dataGetter, 'maxNodeSize', 0, 100).step(1);
@@ -436,12 +456,18 @@ function interactiveGUI(){
         var pickResult = scene.pick(scene.pointerX, scene.pointerY);
 
         if(pickResult.hit){
+
+        	var meshName = pickResult.pickedMesh.name;
+
 			// User clicked on a node!
-			if(pickResult.pickedMesh.name.substring(0,4)=="node"){
+			if(meshName.substring(0,4)=="node"){
 				
-				var pickedNode = parseInt(pickResult.pickedMesh.name.substring(4,pickResult.pickedMesh.name.length));
+				// 0: tier index, 1: node index
+				var nodeID = meshName.substring(4, meshName.length).split(",");
+				// Get specified node data
+				var pickedNode = tiers[nodeID[0]].nodes[nodeID[1]];
 			
-				console.log(pickedNode);
+
 				// GUI
 				var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
 
@@ -450,8 +476,8 @@ function interactiveGUI(){
 
 				var rect1 = new BABYLON.GUI.Rectangle();
 				rect1.alpha = 0.85;
-				rect1.width = "300px";
-				rect1.height = "175px";
+				rect1.width = "280px";
+				rect1.height = "130px";
 				rect1.cornerRadius = 20;
 				rect1.color = "Orange";
 				rect1.thickness = 4;
@@ -462,15 +488,15 @@ function interactiveGUI(){
 
 
 				var label = new BABYLON.GUI.TextBlock();
-				label.text = "IP: " + nodes[pickedNode].ip + "\n" +
-							 "# Flows: " + nodes[pickedNode].flows + " (" + nodes[pickedNode].flowsP + "%)\n" +
-							 "# Packets: " + nodes[pickedNode].ipkt + " (" + nodes[pickedNode].ipktP + "%)\n" +
-							 "# Bytes: " + nodes[pickedNode].ibyt + " (" + nodes[pickedNode].ibytP + "%)\n" +
-							 "iPPS: " + nodes[pickedNode].ipps + "\n" +
-							 "iBPS: " + nodes[pickedNode].ibps + "\n" +
-							 "iBPP: " + nodes[pickedNode].ibpp; 
-							 
-							 
+				label.text = "IP: " + pickedNode.ip + "\n\n" +
+							 "Flows: " + pickedNode.flows + " (" + pickedNode.flowsP + "%)\n" +
+							 "Packets: " + pickedNode.ipkt/1000 + " K (" + pickedNode.ipktP + "%)\n" +
+							 "Bytes: " + (pickedNode.ibyt/1000000000).toFixed(2) + " GB (" + pickedNode.ibytP + "%)";// +
+							 //"iPPS: " + pickedNode.ipps + "\n" +
+							 //"iBPS: " + pickedNode.ibps + "\n" +
+							 //"iBPP: " + pickedNode.ibpp; 
+				//label.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+				//label.paddingLeftInPixels = 1000;		 
 							 
 				rect1.addControl(label);
 
@@ -488,64 +514,84 @@ function interactiveGUI(){
 				line.dash = [10,10];
 				line.lineWidth = 4;
 				line.color = "Orange";
-				line.y2 = 80;
+				line.y2 = 68;
 				line.linkOffsetY = 0;
 				advancedTexture.addControl(line);
 				line.linkWithMesh(pickResult.pickedMesh); 
 				line.connectedControl = rect1;  
 					
-			// User clicked on a line!
-			}else if(pickResult.pickedMesh.name.substring(0,4)=="line"){
+
+			// User clicked on a port!
+			}else if(meshName.substring(0,4)=="port"){
+				
+				// 0: tier index, 1: node index, 2: port index
+				var portID = meshName.substring(4, meshName.length).split(",");
+				// Get specified node data
+				var pickedPort = tiers[portID[0]].nodes[portID[1]].ports[portID[2]];
 			
-				var pickedLine = parseInt(pickResult.pickedMesh.name[4]);
-	
+
+				// GUI
 				var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
 				openWindows.push(advancedTexture);
-			
+				
+
 				var rect1 = new BABYLON.GUI.Rectangle();
 				rect1.alpha = 0.85;
-				rect1.width = "300px";
-				rect1.height = "175px";
+				rect1.width = "200px";
+				rect1.height = "210px";
 				rect1.cornerRadius = 20;
-				rect1.color = "White";
+				rect1.color = "Orange";
 				rect1.thickness = 4;
-				rect1.background = "Blue";
+				rect1.background = "blue";
 				advancedTexture.addControl(rect1);
 				rect1.linkWithMesh(pickResult.pickedMesh);   
 				rect1.linkOffsetY = -225;
 
+
 				var label = new BABYLON.GUI.TextBlock();
-				label.text = "Src IP: " + connections[pickedLine].srcIP + "\n" +
-							 "Dst IP: " + connections[pickedLine].dstIP + "\n" +
-							 "Src Port: " + connections[pickedLine].srcPort + "\n" +
-							 "Dst Port: " + connections[pickedLine].dstPort + "\n" +
-							 "# Packets: " + connections[pickedLine].numPackets + "\n" +
-							 "# Bytes: " + connections[pickedLine].numBytes; 
-							 
-							 
+				label.text = "Port: " + pickedPort.num + "\n\n" +
+							 "In Flows: " + pickedPort.inFlows + "\n" +
+							 "In Packets: " + pickedPort.inPkts/1000 + " K\n" +
+							 "In Bytes: " + (pickedPort.inByts/1000000000).toFixed(2) + " GB\n\n" +
+							 "Out Flows: " + pickedPort.outFlows + "\n" +
+							 "Out Packets: " + pickedPort.outPkts/1000 + " K\n" +
+							 "Out Bytes: " + (pickedPort.outByts/1000000000).toFixed(2) + " GB";
+							 	 
 							 
 				rect1.addControl(label);
 
-				var target = new BABYLON.GUI.Ellipse();
+				/*var target = new BABYLON.GUI.Ellipse();
 				target.width = "20px";
 				target.height = "20px";
-				target.color = "White";
+				target.color = "Orange";
 				target.thickness = 4;
-				target.background = "Blue";
+				target.background = "blue";
 				advancedTexture.addControl(target);
-				target.linkWithMesh(pickResult.pickedMesh);   
+				target.linkWithMesh(pickResult.pickedMesh);  */ 
 
 				var line = new BABYLON.GUI.Line();
 				line.alpha = 0.8;
 				line.dash = [10,10];
 				line.lineWidth = 4;
-				line.color = "White";
-				line.y2 = 80;
+				line.color = "Orange";
+				line.y2 = 105;
 				line.linkOffsetY = 0;
 				advancedTexture.addControl(line);
 				line.linkWithMesh(pickResult.pickedMesh); 
 				line.connectedControl = rect1;  
+					
 			}
+
+
+
+
+
+
+
+
+
+			
         }
 	});
 
@@ -572,18 +618,22 @@ function buildVis(data){
 	centerNode = new Node((nodes.splice(0,1))[0]);
 	
 	centerNode.mesh = BABYLON.Mesh.CreateSphere("centerNode", 16, centerNode.meshSize, scene);
+	centerNode.mesh.material = new BABYLON.StandardMaterial("centerNodeMat", scene);
+	centerNode.mesh.material.diffuseColor = new BABYLON.Color3(1,1,0.5);
 
 	// Create and place ports around node
     var portTheta = 0;
     var portDeltaTheta = (2*Math.PI)/centerNode.ports.length;
     for(var j=0; j<centerNode.ports.length; j++){
         centerNode.ports[j].mesh = BABYLON.Mesh.CreateSphere("centerNode" + "_port" + centerNode.ports[j].num, 16, centerNode.meshSize/6, scene);
-        centerNode.ports[j].mesh.position = new BABYLON.Vector3((centerNode.meshSize/2) * Math.cos(portTheta), 0, (centerNode.meshSize/2) * Math.sin(portTheta));
+        centerNode.ports[j].mesh.position = new BABYLON.Vector3((centerNode.meshSize/1.5) * Math.cos(portTheta), 0, (centerNode.meshSize/1.5) * Math.sin(portTheta));
         
         //MATERIAL
+        var portColor = colorHash(centerNode.ports[j].num);
+
         centerNode.ports[j].mesh.material =  new BABYLON.StandardMaterial("centerNode" + "_port" + centerNode.ports[j].num, scene);
         centerNode.ports[j].mesh.material.specularColor = new BABYLON.Color3(0, 0, 0);
-        centerNode.ports[j].mesh.material.diffuseColor = new BABYLON.Color3(parseInt(centerNode.ports[j].num) % 3, parseInt(centerNode.ports[j].num) % 4, parseInt(centerNode.ports[j].num) % 2);
+        centerNode.ports[j].mesh.material.diffuseColor = new BABYLON.Color3( portColor.r, portColor.g, portColor.b);
 
         centerNode.ports[j].mesh.parent = centerNode.mesh;
         portTheta += portDeltaTheta;
@@ -602,13 +652,13 @@ function buildVis(data){
 
 
 	// tier control vars
-	var nodesPerTier = 5;
+	//var nodesPerTier = 5;
 	var numTiers = Math.ceil(nodes.length/nodesPerTier);
 
 
 	// Create tiers
-	for(var x=1; x<=numTiers; x++){
-		tiers.push(new Tier(100*x, x));
+	for(var x=0; x<numTiers; x++){
+		tiers.push(new Tier(100*x + 100, x));
 	}
 
 
@@ -641,30 +691,8 @@ function buildVis(data){
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 	// Add connections
 	var connects = data[2];
-
-	/*console.log("CONNECTIONS:");
-	console.log(connections);
-
-	var testConnection = new Connection(data[2][0]);
-
-	console.log("TEST: ");
-	console.log(testConnection);*/
 
 	for(var x=0; x<connects.length; x++){
 		connections.push(new Connection(connects[x]));
@@ -692,4 +720,21 @@ function randomNumber(min,max){
 }
 function degToRad(degrees) {
     return degrees * Math.PI / 180;
+}
+function colorHash(inputString){
+	var sum = 0;
+	
+	for(var i in inputString){
+		sum += inputString.charCodeAt(i);
+	}
+
+	var r = ~~(('0.'+Math.sin(sum+1).toString().substr(6))*256);
+	var g = ~~(('0.'+Math.sin(sum+2).toString().substr(6))*256);
+	var b = ~~(('0.'+Math.sin(sum+3).toString().substr(6))*256);
+
+	return {
+		 r: r/100
+		,g: g/100
+		,b: b/100
+	};
 }
