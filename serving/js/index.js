@@ -29,13 +29,6 @@ var openWindows = [];
 
 
 
-
-
-
-
-
-
-
 // Entry point
 document.addEventListener("DOMContentLoaded", startBabylonJS, false);
 
@@ -234,8 +227,17 @@ class Tier{
     	}
 
     	addNode(node){
-    		//Add node to tier's node array
     		this.nodes.push(new Node(node));
+    	}
+
+    	dispose(){
+    		//Remove dashed line mesh
+    		this.mesh.dispose();
+
+    		//Remove all nodes
+    		for(var x=0; x<this.nodes.length; x++){
+    			this.nodes[x].mesh.dispose();
+    		}
     	}
 
     	drawNodes(){
@@ -601,18 +603,39 @@ function interactiveGUI(){
 
 function buildVis(data){
 
-	//Clear previous nodes
-	// * * * * * * * * *
-	// tiers and center!!!!!!!!!!
+	// 1. Clear previous visualization
 
-	
+	//Center node
+	if(typeof centerNode !== 'undefined'){
+		centerNode.mesh.dispose();
+		centerNode = null;
+	}
+
+	//Tiers & nodes
+	if(typeof tiers !== 'undefined'){
+		for(x=0; x<tiers.length; x++){
+			tiers[x].dispose();
+		}
+		tiers = [];
+	}
+
+	//Connections
+	if(typeof connections !== 'undefined'){
+		for(x=0; x<connections.length; x++){
+			//If the connection has been drawn, then remove it
+			if(connections[x].mesh){
+				connections[x].mesh.dispose();
+			}
+		}
+		connections = [];
+	}
+
+
+
+
 
 	//Newly returned nodes
 	var nodes = data[1];
-
-
-
-
 
 	// First node is the center node
 	centerNode = new Node((nodes.splice(0,1))[0]);
