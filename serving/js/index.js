@@ -12,8 +12,6 @@ var canvas;
 var scene;
 var engine;
 
-
-
 // Global mesh vars
 var tiers = [];
 var connections = [];
@@ -24,8 +22,6 @@ var nodesPerTier = 5;
 
 // Individual GUIs that are open
 var openWindows = [];
-
-
 
 
 
@@ -47,6 +43,9 @@ function startBabylonJS() {
 	}
 }
 
+
+
+// Classes of components for the visualization
 class Connection{
 
 	constructor(connectionObj){
@@ -279,6 +278,7 @@ class Tier{
 }
 
 
+
 // Babylon Essentials
 function initBabylon(){
 	canvas = document.getElementById("renderCanvas");
@@ -297,6 +297,7 @@ function initBabylon(){
 }
 
 
+// SocketIO function definitions
 function setupSocketIO(){
 	
 	socket.emit('onconnected', function(data) {
@@ -318,7 +319,8 @@ function setupSocketIO(){
 
 }
 	
-	
+
+// Initialize basic scene elements
 function setupScene(){
 	// This creates and positions a free camera (non-mesh)
 	var camera = new BABYLON.ArcRotateCamera("camera", 0, 1, 200, new BABYLON.Vector3(0,0,0),scene);
@@ -377,7 +379,7 @@ function setupScene(){
 }
 
 
-
+// visGenGUI object
 var genData = function(){
 
 	this.fileName = 'anonFlows';
@@ -423,7 +425,7 @@ var genData = function(){
 }
 
 
-// Customization windows for generating the visualization
+// Customization window for generating the visualization
 function visGenGUI(){
 	var dataGetter = new genData();
 	var gui = new dat.GUI();	
@@ -600,140 +602,119 @@ function interactiveGUI(){
 }	
 
 
-
+// Visualization generation
 function buildVis(data){
-
-	// 1. Clear previous visualization
-
-	//Center node
-	if(typeof centerNode !== 'undefined'){
-		centerNode.mesh.dispose();
-		centerNode = null;
-	}
-
-	//Tiers & nodes
-	if(typeof tiers !== 'undefined'){
-		for(x=0; x<tiers.length; x++){
-			tiers[x].dispose();
-		}
-		tiers = [];
-	}
-
-	//Connections
-	if(typeof connections !== 'undefined'){
-		for(x=0; x<connections.length; x++){
-			//If the connection has been drawn, then remove it
-			if(connections[x].mesh){
-				connections[x].mesh.dispose();
-			}
-		}
-		connections = [];
-	}
-
-
-
-
 
 	//Newly returned nodes
 	var nodes = data[1];
 
-	// First node is the center node
-	centerNode = new Node((nodes.splice(0,1))[0]);
-	
-	centerNode.mesh = BABYLON.Mesh.CreateSphere("centerNode", 16, centerNode.meshSize, scene);
-	centerNode.mesh.material = new BABYLON.StandardMaterial("centerNodeMat", scene);
-	centerNode.mesh.material.diffuseColor = new BABYLON.Color3(1,1,0.5);
 
-	// Create and place ports around node
-    var portTheta = 0;
-    var portDeltaTheta = (2*Math.PI)/centerNode.ports.length;
-    for(var j=0; j<centerNode.ports.length; j++){
-        centerNode.ports[j].mesh = BABYLON.Mesh.CreateSphere("centerNode" + "_port" + centerNode.ports[j].num, 16, centerNode.meshSize/6, scene);
-        centerNode.ports[j].mesh.position = new BABYLON.Vector3((centerNode.meshSize/1.5) * Math.cos(portTheta), 0, (centerNode.meshSize/1.5) * Math.sin(portTheta));
-        
-        //MATERIAL
-        var portColor = colorHash(centerNode.ports[j].num);
-
-        centerNode.ports[j].mesh.material =  new BABYLON.StandardMaterial("centerNode" + "_port" + centerNode.ports[j].num, scene);
-        centerNode.ports[j].mesh.material.specularColor = new BABYLON.Color3(0, 0, 0);
-        centerNode.ports[j].mesh.material.diffuseColor = new BABYLON.Color3( portColor.r, portColor.g, portColor.b);
-
-        centerNode.ports[j].mesh.parent = centerNode.mesh;
-        portTheta += portDeltaTheta;
-    }
-
-	centerNode.mesh.position = new BABYLON.Vector3(0, 0, 0);
-
-
-	
+	clearCurrentVis();
+	createCenterNode();
+	createTiers();
+	createConnections();
 
 
 
-
-
-
-
-
-	// tier control vars
-	//var nodesPerTier = 5;
-	var numTiers = Math.ceil(nodes.length/nodesPerTier);
-
-
-	// Create tiers
-	for(var x=0; x<numTiers; x++){
-		tiers.push(new Tier(100*x + 100, x));
-	}
-
-
-
-	var nodeIndex = 0;
-	var lastNodeIndex = 0;
-	var tierIndex = 0;
-
-	// Add nodes to tiers
-	while(tierIndex<numTiers){
-
-		while((nodeIndex-lastNodeIndex)<nodesPerTier && nodeIndex<nodes.length){
-			tiers[tierIndex].addNode(nodes[nodeIndex]);
-			nodeIndex++;
+	function clearCurrentVis(){
+		//Center node
+		if(typeof centerNode !== 'undefined'){
+			centerNode.mesh.dispose();
+			centerNode = null;
 		}
+
+		//Tiers & nodes
+		if(typeof tiers !== 'undefined'){
+			for(var x=0; x<tiers.length; x++){
+				tiers[x].dispose();
+			}
+			tiers = [];
+		}
+
+		//Connections
+		if(typeof connections !== 'undefined'){
+			for(var x=0; x<connections.length; x++){
+				//If the connection has been drawn, then remove it
+				if(connections[x].mesh){
+					connections[x].mesh.dispose();
+				}
+			}
+			connections = [];
+		}
+	}
+
+
+	function createCenterNode(){
+		centerNode = new Node((nodes.splice(0,1))[0]);
 		
-		lastNodeIndex = nodeIndex;
-		tierIndex++;
+		centerNode.mesh = BABYLON.Mesh.CreateSphere("centerNode", 16, centerNode.meshSize, scene);
+		centerNode.mesh.material = new BABYLON.StandardMaterial("centerNodeMat", scene);
+		centerNode.mesh.material.diffuseColor = new BABYLON.Color3(1,1,0.5);
+
+		//Create and place ports
+	    var portTheta = 0;
+	    var portDeltaTheta = (2*Math.PI)/centerNode.ports.length;
+	    for(var j=0; j<centerNode.ports.length; j++){
+	        centerNode.ports[j].mesh = BABYLON.Mesh.CreateSphere("centerNode" + "_port" + centerNode.ports[j].num, 16, centerNode.meshSize/6, scene);
+	        centerNode.ports[j].mesh.position = new BABYLON.Vector3((centerNode.meshSize/1.5) * Math.cos(portTheta), 0, (centerNode.meshSize/1.5) * Math.sin(portTheta));
+	        
+	        //MATERIAL
+	        var portColor = colorHash(centerNode.ports[j].num);
+	        centerNode.ports[j].mesh.material =  new BABYLON.StandardMaterial("centerNode" + "_port" + centerNode.ports[j].num, scene);
+	        centerNode.ports[j].mesh.material.specularColor = new BABYLON.Color3(0, 0, 0);
+	        centerNode.ports[j].mesh.material.diffuseColor = new BABYLON.Color3( portColor.r, portColor.g, portColor.b);
+
+	        centerNode.ports[j].mesh.parent = centerNode.mesh;
+	        portTheta += portDeltaTheta;
+	    }
+
+		centerNode.mesh.position = new BABYLON.Vector3(0, 0, 0);
 	}
 
-	// Draw nodes
-	for(var x=0; x<tiers.length; x++){
-		tiers[x].drawNodes();
+
+	function createTiers(){
+		//Determine # of nessecary tiers
+		var numTiers = Math.ceil(nodes.length/nodesPerTier);
+
+		//Create tiers
+		for(var x=0; x<numTiers; x++){
+			tiers.push(new Tier(100*x + 100, x));
+		}
+
+
+		var nodeIndex = 0;
+		var lastNodeIndex = 0;
+		var tierIndex = 0;
+
+		//Add nodes to tiers
+		while(tierIndex<numTiers){
+
+			while((nodeIndex-lastNodeIndex)<nodesPerTier && nodeIndex<nodes.length){
+				tiers[tierIndex].addNode(nodes[nodeIndex]);
+				nodeIndex++;
+			}
+			
+			lastNodeIndex = nodeIndex;
+			tierIndex++;
+		}
+
+		// Draw nodes
+		for(var x=0; x<tiers.length; x++){
+			tiers[x].drawNodes();
+		}
 	}
 
 
+	function createConnections(){
+		// Add connections
+		var connects = data[2];
 
-
-
-
-
-
-	// Add connections
-	var connects = data[2];
-
-	for(var x=0; x<connects.length; x++){
-		connections.push(new Connection(connects[x]));
+		for(var x=0; x<connects.length; x++){
+			connections.push(new Connection(connects[x]));
+		}
 	}
-
-
-	var test = 0;
-
-	for(var x=0; x<connections.length; x++){
-		if(connections[x].test)
-			test++;
-	}
-
-	console.log("# connections visible = " + test);
-
 
 }
-
 
 
 
