@@ -1,0 +1,14 @@
+#!/bin/sh
+
+
+#
+# Old capture routine, stores in PCAP formatted files rather than PCAP-NG due to limitations of tcpdump
+#
+#/usr/local/bin/sflowtool -p 6343 -t | tcpdump -r - -w /storage/sflowInput/trace-%Y-%m-%d-%H_%M_%S.pcap -G  14400 
+
+
+#
+# New capture routine, stores directly in nfcapd formatted files negating the need to convert pcap
+# which should result in faster, more efficient operation.
+#
+/usr/local/bin/sfcapd -p 6343 -4 -l /storage/sflowInput/ -T all -t 300 -w -D

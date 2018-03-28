@@ -1,0 +1,12 @@
+#!/bin/sh
+
+SERVICE="inotifywait"
+RESULT=`ps -a | sed -n /${SERVICE}/p`
+
+if [ "${RESULT:-null}" = null ]; then
+    #nohup ./convNewData &
+    nohup ./anonymizeData &
+    echo "Started!"
+else
+    echo "ERROR: Already watching."
+fi

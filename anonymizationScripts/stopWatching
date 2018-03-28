@@ -1,0 +1,5 @@
+#!/bin/sh
+
+pkill -f inotifywait
+pkill -f anonymizeData
+pkill -f convNewData
