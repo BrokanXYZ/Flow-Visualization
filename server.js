@@ -156,7 +156,7 @@ io.on('connection', function(socket){
 
 
 		// 3. Get connection data
-
+		
 		// 3a. Run nfdump
 		var getConnections = cp.spawnSync('nfdump', ['-O' + 'flows','-r' + data.fileName, '-o' + 'fmt:%ts,%te,%td,%pr,%sa,%da,%sp,%dp,%pkt,%byt,%fl,%bps,%pps,%bpp', '-A' + 'srcip,dstip,srcport,dstport'], { encoding : 'utf8' });
 
@@ -290,13 +290,22 @@ io.on('connection', function(socket){
 		}
 
 
+		// 5. Determine return code
+		var returnCode = "100";
+
+		if(data.connections && data.ports){
+			returnCode = "111";
+		}else if(data.connections){
+			returnCode = "101";
+		}else if(data.ports){
+			returnCode = "110";
+		}
 
 
+		// 6. Package data
+		var returnData = [returnCode, nodes, connections, summary, minFlows, maxFlows];
 
-		// 5. Package data
-		var returnData = [true, nodes, connections, summary, minFlows, maxFlows];
-
-		// 6. Send data to client
+		// 7. Send data to client
 		socket.emit('NFdumpReturn', returnData);
 
 	});

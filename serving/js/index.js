@@ -19,9 +19,13 @@ var centerNode;
 
 // Global visual generation vars (with default values)
 var nodesPerTier = 5;
+var availableConnections = 0;
 
 // Individual GUIs that are open
 var openWindows = [];
+
+// Object for the visualization generation interface
+var visGenData;
 
 
 
@@ -148,16 +152,12 @@ class Connection{
 		}
 
 
-		this.test = false;
-
+	
 		// 3. If src and dst positions where found, then draw the connection. Otherwise do not draw.
 		if(srcFound && dstFound){
 
-			this.test = true;
-
-
 			// Bezier Curve with control point being the midpoint b/w src and dst at a constant HEIGHT
-			this.mesh = BABYLON.MeshBuilder.CreateTube("connection_" + this.srcip + ":" + this.srcpt + " to " + this.dstip + ":" + this.dstpt, 
+			this.mesh = BABYLON.MeshBuilder.CreateTube("conn_" + connections.length, 
 					{path: BABYLON.Curve3.CreateQuadraticBezier(this.srcPosition, new BABYLON.Vector3((this.srcPosition.x + this.dstPosition.x)/2, 100, (this.srcPosition.z + this.dstPosition.z)/2), this.dstPosition, 20).getPoints(), 
 					radius: 0.25, 
 					tessellation: 4, 
@@ -239,7 +239,7 @@ class Tier{
     		}
     	}
 
-    	drawNodes(){
+    	drawNodes(drawPorts){
     		//Get new delta theta
     		var theta = 0;
     		var deltaTheta = (2*Math.PI)/this.nodes.length;
@@ -250,23 +250,26 @@ class Tier{
 				this.nodes[i].mesh = BABYLON.Mesh.CreateSphere("node" + this.tierNum + "," + i, 16, this.nodes[i].meshSize, scene);
 				this.nodes[i].mesh.material = new BABYLON.StandardMaterial("tier" + this.tierNum + "_node" + i + "Mat", scene);
 				//this.nodes[i].mesh.material.diffuseColor = new BABYLON.Color3(1.3,1,0.7);
-				// Create and place ports around node
-			    var portTheta = 0;
-			    var portDeltaTheta = (2*Math.PI)/this.nodes[i].ports.length;
-			    for(var j=0; j<this.nodes[i].ports.length; j++){
-			        this.nodes[i].ports[j].mesh = BABYLON.Mesh.CreateSphere("port" + this.tierNum + "," + i + "," + j, 16, this.nodes[i].meshSize/6, scene);
-			        this.nodes[i].ports[j].mesh.position = new BABYLON.Vector3((this.nodes[i].meshSize/1.5) * Math.cos(portTheta), 0, (this.nodes[i].meshSize/1.5) * Math.sin(portTheta));
-			        
-			        //MATERIAL
-			        var portColor = colorHash(this.nodes[i].ports[j].num);
 
-			        this.nodes[i].ports[j].mesh.material =  new BABYLON.StandardMaterial("node" + i + "_port" + this.nodes[i].ports[j].num, scene);
-			        this.nodes[i].ports[j].mesh.material.specularColor = new BABYLON.Color3(0, 0, 0);
-			        this.nodes[i].ports[j].mesh.material.diffuseColor = new BABYLON.Color3(portColor.r, portColor.g, portColor.b);
+				if(drawPorts){
+					// Create and place ports around node
+				    var portTheta = 0;
+				    var portDeltaTheta = (2*Math.PI)/this.nodes[i].ports.length;
+				    for(var j=0; j<this.nodes[i].ports.length; j++){
+				        this.nodes[i].ports[j].mesh = BABYLON.Mesh.CreateSphere("port" + this.tierNum + "," + i + "," + j, 16, this.nodes[i].meshSize/6, scene);
+				        this.nodes[i].ports[j].mesh.position = new BABYLON.Vector3((this.nodes[i].meshSize/1.5) * Math.cos(portTheta), 0, (this.nodes[i].meshSize/1.5) * Math.sin(portTheta));
+				        
+				        //MATERIAL
+				        var portColor = colorHash(this.nodes[i].ports[j].num);
 
-			        this.nodes[i].ports[j].mesh.parent = this.nodes[i].mesh;
-			        portTheta += portDeltaTheta;
-			    }
+				        this.nodes[i].ports[j].mesh.material =  new BABYLON.StandardMaterial("node" + i + "_port" + this.nodes[i].ports[j].num, scene);
+				        this.nodes[i].ports[j].mesh.material.specularColor = new BABYLON.Color3(0, 0, 0);
+				        this.nodes[i].ports[j].mesh.material.diffuseColor = new BABYLON.Color3(portColor.r, portColor.g, portColor.b);
+
+				        this.nodes[i].ports[j].mesh.parent = this.nodes[i].mesh;
+				        portTheta += portDeltaTheta;
+				    }
+				}
 			    
 			    // Place node
 				this.nodes[i].mesh.position = new BABYLON.Vector3(this.radius * Math.cos(theta), 0, this.radius * Math.sin(theta));
@@ -310,7 +313,7 @@ function setupSocketIO(){
 		console.log(data);
 
 		//Check for error in nfdump scripts
-		if(data[0]){
+		if(data[0]!="000"){
 			buildVis(data);
 		}else{
 			alert('ERROR: ' + data[1]);
@@ -324,6 +327,7 @@ function setupSocketIO(){
 function setupScene(){
 	// This creates and positions a free camera (non-mesh)
 	var camera = new BABYLON.ArcRotateCamera("camera", 0, 1, 200, new BABYLON.Vector3(0,0,0),scene);
+	// WASD camera movement
 	camera.keysDown = [83];
 	camera.keysUp = [87];
 	camera.keysLeft = [65];
@@ -389,7 +393,9 @@ var genData = function(){
 	this.stat = 'ip';
 	this.orderBy = 'flows';
 	this.nodesPerTier = 5;
+	this.ports = false;
 	this.connections = false;
+	this.visibleConnections = 0;
 
 	this.executeNFdump = function(){
 
@@ -405,6 +411,7 @@ var genData = function(){
 		data.maxNodeSize = this.maxNodeSize;
 		data.stat = this.stat;
 		data.orderBy = this.orderBy;
+		data.ports = this.ports
 		data.connections = this.connections;
 		
 		
@@ -427,7 +434,7 @@ var genData = function(){
 
 // Customization window for generating the visualization
 function visGenGUI(){
-	var dataGetter = new genData();
+	visGenData = new genData();
 	var gui = new dat.GUI();	
 	gui.domElement.style.marginTop = "40px";
 	gui.domElement.style.marginRight = "40px";
@@ -435,21 +442,23 @@ function visGenGUI(){
 
 
 	var essentials = gui.addFolder('Essentials');
-	essentials.add(dataGetter, 'fileName');
-	essentials.add(dataGetter, 'nodesPerTier', 1, 100).step(1);
-	essentials.add(dataGetter, 'numNodes', 1, 100).step(1);
-	essentials.add(dataGetter, 'minNodeSize', 0, 100).step(1);
-	essentials.add(dataGetter, 'maxNodeSize', 0, 100).step(1);
-	essentials.add(dataGetter, 'stat', ['record', 'srcip', 'dstip', 'ip', 'nhip', 'nhbip', 'router', 'srcport', 'dstport', 'port', 'tos', 'srctos', 'dsttos', 'dir', 'srcas', 'dstas', 'as', 'inif', 'outif', 'if', 'srcmask', 'dstmask', 'srcvlan', 'dstvlan', 'vlan', 'insrcmac', 'outdstmac', 'indstmac', 'outsrcmac', 'srcmac', 'dstmac', 'inmac', 'outmac', 'mask', 'proto'] );
-	essentials.add(dataGetter, 'orderBy', ['flows', 'ipkg', 'opkg', 'ibytes', 'obytes', 'ipps', 'opps', 'ibps', 'obps', 'tstart', 'tend'] );
-	essentials.add(dataGetter, 'executeNFdump');
+	essentials.add(visGenData, 'fileName');
+	essentials.add(visGenData, 'nodesPerTier', 1, 100).step(1);
+	essentials.add(visGenData, 'numNodes', 1, 100).step(1);
+	essentials.add(visGenData, 'minNodeSize', 0, 100).step(1);
+	essentials.add(visGenData, 'maxNodeSize', 0, 100).step(1);
+	essentials.add(visGenData, 'ports');
+	essentials.add(visGenData, 'connections');
+	essentials.add(visGenData, 'stat', ['record', 'srcip', 'dstip', 'ip', 'nhip', 'nhbip', 'router', 'srcport', 'dstport', 'port', 'tos', 'srctos', 'dsttos', 'dir', 'srcas', 'dstas', 'as', 'inif', 'outif', 'if', 'srcmask', 'dstmask', 'srcvlan', 'dstvlan', 'vlan', 'insrcmac', 'outdstmac', 'indstmac', 'outsrcmac', 'srcmac', 'dstmac', 'inmac', 'outmac', 'mask', 'proto'] );
+	essentials.add(visGenData, 'orderBy', ['flows', 'ipkg', 'opkg', 'ibytes', 'obytes', 'ipps', 'opps', 'ibps', 'obps', 'tstart', 'tend'] );
+	essentials.add(visGenData, 'executeNFdump');
 
-	var other = gui.addFolder('Other');
-	other.add(dataGetter, 'connections');
+	var dynamic = gui.addFolder('Dynamic Options');
+	dynamic.add(visGenData, 'visibleConnections',0, 1000);
 
 	var download = gui.addFolder('Download');
-	download.add(dataGetter, 'fileType', ['biline', 'bilong', 'csv', 'extended', 'line', 'long', 'nel', 'nsel', 'pipe', 'raw'])
-	download.add(dataGetter, 'downloadStats');
+	download.add(visGenData, 'fileType', ['biline', 'bilong', 'csv', 'extended', 'line', 'long', 'nel', 'nsel', 'pipe', 'raw'])
+	download.add(visGenData, 'downloadStats');
 }
 	
 
@@ -461,6 +470,7 @@ function interactiveGUI(){
 
         if(pickResult.hit){
 
+        	// Get name of selected mesh
         	var meshName = pickResult.pickedMesh.name;
 
 			// User clicked on a node!
@@ -494,8 +504,8 @@ function interactiveGUI(){
 				var label = new BABYLON.GUI.TextBlock();
 				label.text = "IP: " + pickedNode.ip + "\n\n" +
 							 "Flows: " + pickedNode.flows + " (" + pickedNode.flowsP + "%)\n" +
-							 "Packets: " + pickedNode.ipkt/1000 + " K (" + pickedNode.ipktP + "%)\n" +
-							 "Bytes: " + (pickedNode.ibyt/1000000000).toFixed(2) + " GB (" + pickedNode.ibytP + "%)";// +
+							 "Packets: " + simplifyPacketNum(pickedNode.ipkt) + " (" + pickedNode.ipktP + "%)\n" +
+							 "Bytes: " + simplifyByteNum(pickedNode.ibyt) + " (" + pickedNode.ibytP + "%)";// +
 							 //"iPPS: " + pickedNode.ipps + "\n" +
 							 //"iBPS: " + pickedNode.ibps + "\n" +
 							 //"iBPP: " + pickedNode.ibpp; 
@@ -524,13 +534,12 @@ function interactiveGUI(){
 				line.linkWithMesh(pickResult.pickedMesh); 
 				line.connectedControl = rect1;  
 					
-
 			// User clicked on a port!
 			}else if(meshName.substring(0,4)=="port"){
 				
 				// 0: tier index, 1: node index, 2: port index
 				var portID = meshName.substring(4, meshName.length).split(",");
-				// Get specified node data
+				// Get specified port data
 				var pickedPort = tiers[portID[0]].nodes[portID[1]].ports[portID[2]];
 			
 
@@ -556,11 +565,11 @@ function interactiveGUI(){
 				var label = new BABYLON.GUI.TextBlock();
 				label.text = "Port: " + pickedPort.num + "\n\n" +
 							 "In Flows: " + pickedPort.inFlows + "\n" +
-							 "In Packets: " + pickedPort.inPkts/1000 + " K\n" +
-							 "In Bytes: " + (pickedPort.inByts/1000000000).toFixed(2) + " GB\n\n" +
+							 "In Packets: " + simplifyPacketNum(pickedPort.inPkts) + "\n" +
+							 "In Bytes: " + simplifyByteNum(pickedPort.inByts) + "\n\n" +
 							 "Out Flows: " + pickedPort.outFlows + "\n" +
-							 "Out Packets: " + pickedPort.outPkts/1000 + " K\n" +
-							 "Out Bytes: " + (pickedPort.outByts/1000000000).toFixed(2) + " GB";
+							 "Out Packets: " + simplifyPacketNum(pickedPort.outPkts) + "\n" +
+							 "Out Bytes: " + simplifyByteNum(pickedPort.outByts);
 							 	 
 							 
 				rect1.addControl(label);
@@ -585,16 +594,180 @@ function interactiveGUI(){
 				line.linkWithMesh(pickResult.pickedMesh); 
 				line.connectedControl = rect1;  
 					
+			// User clicked on a connection!
+			}else if(meshName.substring(0,4)=="conn"){
+
+				// 0: tier index, 1: node index, 2: port index
+				var connectionID = meshName.substring(5, meshName.length);
+				// Get specified connection data
+				var pickedConn = connections[connectionID];
+
+				// GUI
+				var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
+				openWindows.push(advancedTexture);
+				
+
+				var rect1 = new BABYLON.GUI.Rectangle();
+				rect1.alpha = 0.85;
+				rect1.width = "200px";
+				rect1.height = "210px";
+				rect1.cornerRadius = 20;
+				rect1.color = "Orange";
+				rect1.thickness = 4;
+				rect1.background = "blue";
+				advancedTexture.addControl(rect1);
+				rect1.linkWithMesh(pickResult.pickedMesh);   
+				rect1.linkOffsetY = -225;
+
+
+				var label = new BABYLON.GUI.TextBlock();
+				label.text = "Src IP: " + pickedConn.srcip + "\n" +
+							 "Src Port: " + pickedConn.srcpt + "\n" +
+							 "Dst IP: " + pickedConn.dstip+ "\n" +
+							 "Dst Port: " + pickedConn.dstpt + "\n" +
+							 "Flows: " + pickedConn.flows + "\n" +
+							 "Packets: " + simplifyPacketNum(pickedConn.pkt) + "\n" +
+							 "Bytes: " + simplifyByteNum(pickedConn.byt);
+							 	 
+							 
+				rect1.addControl(label);
+
+				var target = new BABYLON.GUI.Ellipse();
+				target.width = "20px";
+				target.height = "20px";
+				target.color = "Orange";
+				target.thickness = 4;
+				target.background = "blue";
+				advancedTexture.addControl(target);
+				target.linkWithMesh(pickResult.pickedMesh);   
+
+				var line = new BABYLON.GUI.Line();
+				line.alpha = 0.8;
+				line.dash = [10,10];
+				line.lineWidth = 4;
+				line.color = "Orange";
+				line.y2 = 105;
+				line.linkOffsetY = 0;
+				advancedTexture.addControl(line);
+				line.linkWithMesh(pickResult.pickedMesh); 
+				line.connectedControl = rect1; 
+
+			// User clicked on the center node!
+			}else if(meshName.substring(0,10)=="centerNode"){
+
+				// GUI
+				var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
+				openWindows.push(advancedTexture);
+				
+
+				var rect1 = new BABYLON.GUI.Rectangle();
+				rect1.alpha = 0.85;
+				rect1.width = "280px";
+				rect1.height = "130px";
+				rect1.cornerRadius = 20;
+				rect1.color = "Orange";
+				rect1.thickness = 4;
+				rect1.background = "green";
+				advancedTexture.addControl(rect1);
+				rect1.linkWithMesh(pickResult.pickedMesh);   
+				rect1.linkOffsetY = -225;
+
+
+				var label = new BABYLON.GUI.TextBlock();
+				label.text = "IP: " + centerNode.ip + "\n\n" +
+							 "Flows: " + centerNode.flows + " (" + centerNode.flowsP + "%)\n" +
+							 "Packets: " + simplifyPacketNum(centerNode.ipkt) + " (" + centerNode.ipktP + "%)\n" +
+							 "Bytes: " + simplifyByteNum(centerNode.ibyt) + " (" + centerNode.ibytP + "%)";// +
+							 //"iPPS: " + centerNode.ipps + "\n" +
+							 //"iBPS: " + centerNode.ibps + "\n" +
+							 //"iBPP: " + centerNode.ibpp; 
+				//label.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+				//label.paddingLeftInPixels = 1000;		 
+							 
+				rect1.addControl(label);
+
+				var target = new BABYLON.GUI.Ellipse();
+				target.width = "20px";
+				target.height = "20px";
+				target.color = "Orange";
+				target.thickness = 4;
+				target.background = "green";
+				advancedTexture.addControl(target);
+				target.linkWithMesh(pickResult.pickedMesh);   
+
+				var line = new BABYLON.GUI.Line();
+				line.alpha = 0.8;
+				line.dash = [10,10];
+				line.lineWidth = 4;
+				line.color = "Orange";
+				line.y2 = 68;
+				line.linkOffsetY = 0;
+				advancedTexture.addControl(line);
+				line.linkWithMesh(pickResult.pickedMesh); 
+				line.connectedControl = rect1;  
+
+			// User clicked on a port for the center node!
+			}else if(meshName.substring(0,10)=="centerPort"){
+
+				// Get port index
+				var portID = meshName.substring(11, meshName.length);
+				// Get specified port data
+				var pickedPort = centerNode.ports[portID];
+
+				// GUI
+				var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
+				openWindows.push(advancedTexture);
+				
+
+				var rect1 = new BABYLON.GUI.Rectangle();
+				rect1.alpha = 0.85;
+				rect1.width = "200px";
+				rect1.height = "210px";
+				rect1.cornerRadius = 20;
+				rect1.color = "Orange";
+				rect1.thickness = 4;
+				rect1.background = "blue";
+				advancedTexture.addControl(rect1);
+				rect1.linkWithMesh(pickResult.pickedMesh);   
+				rect1.linkOffsetY = -225;
+
+
+				var label = new BABYLON.GUI.TextBlock();
+				label.text = "Port: " + pickedPort.num + "\n\n" +
+							 "In Flows: " + pickedPort.inFlows + "\n" +
+							 "In Packets: " + simplifyPacketNum(pickedPort.inPkts) + "\n" +
+							 "In Bytes: " + simplifyByteNum(pickedPort.inByts) + "\n\n" +
+							 "Out Flows: " + pickedPort.outFlows + "\n" +
+							 "Out Packets: " + simplifyPacketNum(pickedPort.outPkts) + "\n" +
+							 "Out Bytes: " + simplifyByteNum(pickedPort.outByts);
+							 	 
+							 
+				rect1.addControl(label);
+
+				/*var target = new BABYLON.GUI.Ellipse();
+				target.width = "20px";
+				target.height = "20px";
+				target.color = "Orange";
+				target.thickness = 4;
+				target.background = "blue";
+				advancedTexture.addControl(target);
+				target.linkWithMesh(pickResult.pickedMesh);*/ 
+
+				var line = new BABYLON.GUI.Line();
+				line.alpha = 0.8;
+				line.dash = [10,10];
+				line.lineWidth = 4;
+				line.color = "Orange";
+				line.y2 = 105;
+				line.linkOffsetY = 0;
+				advancedTexture.addControl(line);
+				line.linkWithMesh(pickResult.pickedMesh); 
+				line.connectedControl = rect1;  
+
 			}
-
-
-
-
-
-
-
-
-
 			
         }
 	});
@@ -610,9 +783,19 @@ function buildVis(data){
 
 
 	clearCurrentVis();
+
 	createCenterNode();
-	createTiers();
-	createConnections();
+	
+	if(data[0][1]=='1'){
+		createTiers(true);
+	}else{
+		createTiers(false);
+	}
+
+	if(data[0][2]=='1'){
+		createConnections();
+	}
+
 
 
 
@@ -655,12 +838,12 @@ function buildVis(data){
 	    var portTheta = 0;
 	    var portDeltaTheta = (2*Math.PI)/centerNode.ports.length;
 	    for(var j=0; j<centerNode.ports.length; j++){
-	        centerNode.ports[j].mesh = BABYLON.Mesh.CreateSphere("centerNode" + "_port" + centerNode.ports[j].num, 16, centerNode.meshSize/6, scene);
+	        centerNode.ports[j].mesh = BABYLON.Mesh.CreateSphere("centerPort" + "_" + j, 16, centerNode.meshSize/6, scene);
 	        centerNode.ports[j].mesh.position = new BABYLON.Vector3((centerNode.meshSize/1.5) * Math.cos(portTheta), 0, (centerNode.meshSize/1.5) * Math.sin(portTheta));
 	        
 	        //MATERIAL
 	        var portColor = colorHash(centerNode.ports[j].num);
-	        centerNode.ports[j].mesh.material =  new BABYLON.StandardMaterial("centerNode" + "_port" + centerNode.ports[j].num, scene);
+	        centerNode.ports[j].mesh.material =  new BABYLON.StandardMaterial("centerNodeMat" + "_" + centerNode.ports[j].num, scene);
 	        centerNode.ports[j].mesh.material.specularColor = new BABYLON.Color3(0, 0, 0);
 	        centerNode.ports[j].mesh.material.diffuseColor = new BABYLON.Color3( portColor.r, portColor.g, portColor.b);
 
@@ -672,7 +855,7 @@ function buildVis(data){
 	}
 
 
-	function createTiers(){
+	function createTiers(drawPorts){
 		//Determine # of nessecary tiers
 		var numTiers = Math.ceil(nodes.length/nodesPerTier);
 
@@ -700,7 +883,7 @@ function buildVis(data){
 
 		// Draw nodes
 		for(var x=0; x<tiers.length; x++){
-			tiers[x].drawNodes();
+			tiers[x].drawNodes(drawPorts);
 		}
 	}
 
@@ -741,4 +924,10 @@ function colorHash(inputString){
 		,g: g/100
 		,b: b/100
 	};
+}
+function simplifyPacketNum(number){
+	return (number/1000).toFixed(2) + " K";
+}
+function simplifyByteNum(number){
+	return (number/1000000000).toFixed(2) + " GB";
 }
