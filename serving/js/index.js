@@ -19,7 +19,6 @@ var centerNode;
 
 // Global visual generation vars (with default values)
 var nodesPerTier = 5;
-var availableConnections = 0;
 
 // Individual GUIs that are open
 var openWindows = [];
@@ -53,6 +52,7 @@ function startBabylonJS() {
 class Connection{
 
 	constructor(connectionObj){
+
 		// 1. Copy data returned from server
 		this.srcip = connectionObj.srcip;
 		this.dstip = connectionObj.dstip;
@@ -68,6 +68,13 @@ class Connection{
 		this.td = connectionObj.td;
 		this.tend = connectionObj.tend;
 		this.tstart = connectionObj.tstart;
+
+		// Based upon the drawn nodes... are we capable of drawing it?
+		this.drawable = false;
+
+		// Height of the curve
+		this.height;
+
 
 		// 2. Get src and dst positions
 		this.srcPosition;
@@ -152,12 +159,19 @@ class Connection{
 		}
 
 
-	
-		// 3. If src and dst positions where found, then draw the connection. Otherwise do not draw.
+		// 3. If src and dst positions were found, then we can draw the connection.
 		if(srcFound && dstFound){
+			// Connection is drawable!
+			this.drawable = true;
+		}
 
+	}
+
+	draw(connectionIndex){
+
+		if(this.drawable){
 			// Bezier Curve with control point being the midpoint b/w src and dst at a constant HEIGHT
-			this.mesh = BABYLON.MeshBuilder.CreateTube("conn_" + connections.length, 
+			this.mesh = BABYLON.MeshBuilder.CreateTube("conn_" + connectionIndex, 
 					{path: BABYLON.Curve3.CreateQuadraticBezier(this.srcPosition, new BABYLON.Vector3((this.srcPosition.x + this.dstPosition.x)/2, 100, (this.srcPosition.z + this.dstPosition.z)/2), this.dstPosition, 20).getPoints(), 
 					radius: 0.25, 
 					tessellation: 4, 
@@ -387,15 +401,16 @@ function setupScene(){
 var genData = function(){
 
 	this.fileName = 'anonFlows';
-	this.numNodes = 25;
+	this.numNodes = 20;
 	this.minNodeSize = 5;
 	this.maxNodeSize = 50;
 	this.stat = 'ip';
 	this.orderBy = 'flows';
 	this.nodesPerTier = 5;
-	this.ports = false;
-	this.connections = false;
-	this.visibleConnections = 0;
+	this.ports = true;
+	this.connections = true;
+	this.connVisible = 100;
+	this.connHeight = 1;
 
 	this.executeNFdump = function(){
 
@@ -422,13 +437,13 @@ var genData = function(){
 
 
 
-	this.fileType = '';
+	/*this.fileType = '';
 
 	this.downloadStats = function(){
 
 		//Download currently generated stats from nfdump
 
-	}
+	}*/
 }
 
 
@@ -454,11 +469,42 @@ function visGenGUI(){
 	essentials.add(visGenData, 'executeNFdump');
 
 	var dynamic = gui.addFolder('Dynamic Options');
-	dynamic.add(visGenData, 'visibleConnections',0, 1000);
+	var connVisible = dynamic.add(visGenData, 'connVisible',0, 1000).step(1);
+	var connHeight = dynamic.add(visGenData, 'connHeight',0, 100).step(1);
 
-	var download = gui.addFolder('Download');
+
+	// Redraw visible connections
+	connVisible.onChange(function(visibleConnections){
+		
+		// Clear all meshes
+		for(var x=0; x<connections.length; x++){
+			if(connections[x].mesh){
+				connections[x].mesh.dispose();
+			}
+		}
+
+		// Draw connections
+		var x=0;
+
+		while(x<visibleConnections && x<connections.length){
+			connections[x].draw(x);
+			x++;
+		}
+
+	});
+
+
+	// Redraw connections with new height multiplier
+	connHeight.onFinishChange(function(value){
+
+		alert(value);
+
+	});
+
+
+	/*var download = gui.addFolder('Download');
 	download.add(visGenData, 'fileType', ['biline', 'bilong', 'csv', 'extended', 'line', 'long', 'nel', 'nsel', 'pipe', 'raw'])
-	download.add(visGenData, 'downloadStats');
+	download.add(visGenData, 'downloadStats');*/
 }
 	
 
@@ -889,12 +935,27 @@ function buildVis(data){
 
 
 	function createConnections(){
-		// Add connections
+		
 		var connects = data[2];
 
+		// 1. Create connection objects
 		for(var x=0; x<connects.length; x++){
 			connections.push(new Connection(connects[x]));
 		}
+
+		// 2. Remove connection objects that are not drawable
+		for(var x=0; x<connections.length; x++){
+			if(!connections[x].drawable){
+				connections.splice(x,1);
+				x--;
+			}
+		}
+
+		// 3. Draw all remaining connections
+		for(var x=0; x<connections.length; x++){
+			connections[x].draw(x);
+		}
+
 	}
 
 }
