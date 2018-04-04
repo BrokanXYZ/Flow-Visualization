@@ -20,6 +20,11 @@ var centerNode;
 // Global visual generation vars (with default values)
 var nodesPerTier = 5;
 
+// Global dynamic visualization vars (with default values)
+var connectionsNumVisisble = 100;
+var connectionsHeight = 1;
+var connectionsRadius = 0.25;
+
 // Individual GUIs that are open
 var openWindows = [];
 
@@ -71,6 +76,9 @@ class Connection{
 
 		// Based upon the drawn nodes... are we capable of drawing it?
 		this.drawable = false;
+
+		// distance b/w src and dst
+		this.distance;
 
 		// Height of the curve
 		this.height;
@@ -163,24 +171,93 @@ class Connection{
 		if(srcFound && dstFound){
 			// Connection is drawable!
 			this.drawable = true;
+
+			// Find distance b/w src and dst
+			this.distance = Math.sqrt(Math.pow(this.dstPosition.x-this.srcPosition.x,2) + Math.pow(this.dstPosition.z-this.srcPosition.z,2));
+
+			// Determine height (just an arbitrary expression)
+			this.height = 15 + 55*(this.distance/100)
 		}
 
 	}
 
-	draw(connectionIndex){
+	draw(connectionIndex, heightMultiplier, connectionRadius){
 
 		if(this.drawable){
 			// Bezier Curve with control point being the midpoint b/w src and dst at a constant HEIGHT
 			this.mesh = BABYLON.MeshBuilder.CreateTube("conn_" + connectionIndex, 
-					{path: BABYLON.Curve3.CreateQuadraticBezier(this.srcPosition, new BABYLON.Vector3((this.srcPosition.x + this.dstPosition.x)/2, 100, (this.srcPosition.z + this.dstPosition.z)/2), this.dstPosition, 20).getPoints(), 
+					{path: BABYLON.Curve3.CreateQuadraticBezier(this.srcPosition
+						, new BABYLON.Vector3((this.srcPosition.x + this.dstPosition.x)/2, this.height * heightMultiplier, (this.srcPosition.z + this.dstPosition.z)/2)
+						, this.dstPosition
+						, 20).getPoints(), 
+					radius: connectionRadius, 
+					tessellation: 4, 
+					sideOrientation: BABYLON.Mesh.SINGLESIDE, 
+					updatable: true}, 
+				scene);
+
+			this.mesh.material = new BABYLON.StandardMaterial("conn_mat_" + connectionIndex, scene);
+			this.mesh.material.specularColor = new BABYLON.Color3(0,0,0);
+		}
+
+	}
+
+
+	// **Failed** cubic Bezier curve attempt
+
+	/*draw(connectionIndex, heightMultiplier){
+
+		if(this.drawable){
+
+			// 1. Determine both control points' positions
+			// Control point 1 will be placed 10% away from the src point
+			// Control point 2 will be placed 90% away from src point
+			var slope = (this.dstPosition.z-this.srcPosition.z) / (this.dstPosition.x-this.srcPosition.x);
+
+			var xDelta = Math.abs(this.dstPosition.x - this.srcPosition.x);
+			var ctrlOneX, ctrlTwoX;
+
+			if(this.srcPosition.x < this.dstPosition.x){
+				ctrlOneX = this.srcPosition.x + xDelta*0.1;
+				ctrlTwoX = this.srcPosition.x + xDelta*0.9;
+			}else{
+				ctrlOneX = this.srcPosition.x - xDelta*0.1;
+				ctrlTwoX = this.srcPosition.x - xDelta*0.9;
+			}
+
+			var zDelta = Math.abs(this.dstPosition.z - this.srcPosition.z);
+			var ctrlOneZ, ctrlTwoZ;
+
+			if(this.srcPosition.z < this.dstPosition.z){
+				ctrlOneZ = this.srcPosition.z + zDelta*0.1;
+				ctrlTwoZ = this.srcPosition.z + zDelta*0.9;
+			}else{
+				ctrlOneZ = this.srcPosition.z - zDelta*0.1;
+				ctrlTwoZ = this.srcPosition.z - zDelta*0.9;
+			}
+			
+			var ctrlOnePosition = new BABYLON.Vector3((ctrlOneZ-this.srcPosition.z)/slope+this.srcPosition.x, this.height*heightMultiplier, slope*(ctrlOneX-this.srcPosition.x)+this.srcPosition.y);
+			var ctrlTwoPosition = new BABYLON.Vector3((ctrlTwoZ-this.srcPosition.z)/slope+this.srcPosition.x, this.height*heightMultiplier, slope*(ctrlTwoX-this.srcPosition.x)+this.srcPosition.y);
+
+
+			// 2. Draw the connections with a cubic Bezier function
+			this.mesh = BABYLON.MeshBuilder.CreateTube("conn_" + connectionIndex, 
+					{path: BABYLON.Curve3.CreateCubicBezier(this.srcPosition
+						, ctrlOnePosition
+						, ctrlTwoPosition
+						, this.dstPosition
+						, 20).getPoints(), 
 					radius: 0.25, 
 					tessellation: 4, 
 					sideOrientation: BABYLON.Mesh.SINGLESIDE, 
 					updatable: true}, 
 				scene);
+
+			this.mesh.material = new BABYLON.StandardMaterial("conn_mat_" + connectionIndex, scene);
+			this.mesh.material.specularColor = new BABYLON.Color3(0,0,0);
 		}
 
-	}
+	}*/
 
 }
 
@@ -411,6 +488,7 @@ var genData = function(){
 	this.connections = true;
 	this.connVisible = 100;
 	this.connHeight = 1;
+	this.connRadius = 0.25;
 
 	this.executeNFdump = function(){
 
@@ -470,7 +548,8 @@ function visGenGUI(){
 
 	var dynamic = gui.addFolder('Dynamic Options');
 	var connVisible = dynamic.add(visGenData, 'connVisible',0, 1000).step(1);
-	var connHeight = dynamic.add(visGenData, 'connHeight',0, 100).step(1);
+	var connHeight = dynamic.add(visGenData, 'connHeight',0, 5).step(0.1);
+	var connRadius = dynamic.add(visGenData, 'connRadius',0, 5).step(0.05);
 
 
 	// Redraw visible connections
@@ -487,17 +566,60 @@ function visGenGUI(){
 		var x=0;
 
 		while(x<visibleConnections && x<connections.length){
-			connections[x].draw(x);
+			connections[x].draw(x, connectionsHeight, connectionsRadius);
 			x++;
 		}
+
+		// Set global var
+		connectionsNumVisisble = visibleConnections;
 
 	});
 
 
 	// Redraw connections with new height multiplier
-	connHeight.onFinishChange(function(value){
+	connHeight.onChange(function(height){
 
-		alert(value);
+		// Clear all meshes
+		for(var x=0; x<connections.length; x++){
+			if(connections[x].mesh){
+				connections[x].mesh.dispose();
+			}
+		}
+
+		// Draw connections
+		var x=0;
+
+		while(x<connectionsNumVisisble && x<connections.length){
+			connections[x].draw(x, height, connectionsRadius);
+			x++;
+		}
+
+		// Set global var
+		connectionsHeight = height;
+
+	});
+
+
+	// Redraw connections with new height multiplier
+	connRadius.onChange(function(radius){
+
+		// Clear all meshes
+		for(var x=0; x<connections.length; x++){
+			if(connections[x].mesh){
+				connections[x].mesh.dispose();
+			}
+		}
+
+		// Draw connections
+		var x=0;
+
+		while(x<connectionsNumVisisble && x<connections.length){
+			connections[x].draw(x, connectionsHeight, radius);
+			x++;
+		}
+
+		// Set global var
+		connectionsRadius = radius;
 
 	});
 
@@ -953,7 +1075,7 @@ function buildVis(data){
 
 		// 3. Draw all remaining connections
 		for(var x=0; x<connections.length; x++){
-			connections[x].draw(x);
+			connections[x].draw(x, connectionsHeight, connectionsRadius);
 		}
 
 	}
